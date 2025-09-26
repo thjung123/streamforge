@@ -39,3 +39,12 @@ Each subsystem (savepoint, monitoring, recovery, etc.) will be documented increm
     - Ensures exactly-once delivery with transactional guarantees
 
 ---
+
+## Configuration
+
+This project uses a `.env` file for local development and testing.  
+Copy `.env.example` to `.env` and fill in the required values:
+
+```bash
+cp src/main/resources/.env.example src/main/resources/.env.example
+```
