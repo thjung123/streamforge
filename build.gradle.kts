@@ -16,7 +16,6 @@ repositories {
 dependencies {
     implementation("org.apache.flink:flink-streaming-java:1.19.0")
     implementation("org.apache.flink:flink-clients:1.19.0")
-
     implementation("org.apache.flink:flink-connector-base:1.19.0")
     implementation("org.apache.flink:flink-connector-kafka:3.2.0-1.19")
 
@@ -40,7 +39,8 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok:1.18.32")
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
 
 tasks.withType<JavaCompile> {
@@ -49,6 +49,9 @@ tasks.withType<JavaCompile> {
 
 tasks.test {
     useJUnitPlatform()
+    testLogging {
+        events("PASSED", "FAILED", "SKIPPED")
+    }
 }
 
 tasks.jar {
