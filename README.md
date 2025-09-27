@@ -36,9 +36,7 @@ Each subsystem (savepoint, monitoring, recovery, etc.) will be documented increm
 
 ## Configuration
 
-This project uses a `.env` file for local development and testing.  
-Copy `.env.example` to `.env` and fill in the required values:
+The project uses a single `.env` file for local development, testing, and as a default configuration source.
+This file contains baseline settings used when no external configuration is provided.
 
-```bash
-cp src/main/resources/.env.example src/main/resources/.env.example
-```
+In real deployments (e.g. staging or production), values in `.env` are typically overridden by environment variables or JVM system properties provided by the deployment platform (such as Kubernetes, Docker, or a secrets manager like Vault).

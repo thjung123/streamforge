@@ -14,33 +14,78 @@ repositories {
 }
 
 dependencies {
+    // Flink core
     implementation("org.apache.flink:flink-streaming-java:1.19.0")
     implementation("org.apache.flink:flink-clients:1.19.0")
-
     implementation("org.apache.flink:flink-connector-base:1.19.0")
     implementation("org.apache.flink:flink-connector-kafka:3.2.0-1.19")
 
+    // Utilities
     implementation("org.jsoup:jsoup:1.17.2")
     implementation("io.github.cdimascio:dotenv-java:3.0.0")
 
+    // External clients
     implementation("io.lettuce:lettuce-core:6.3.0.RELEASE")
     implementation("redis.clients:jedis:3.6.3")
     implementation("org.mongodb:mongodb-driver-sync:4.11.1")
 
+    // Jackson
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.1")
     implementation("com.fasterxml.jackson.core:jackson-core:2.17.1")
     implementation("com.fasterxml.jackson.core:jackson-annotations:2.17.1")
 
+    // Logging
     implementation("org.slf4j:slf4j-api:1.7.36")
     runtimeOnly("org.slf4j:slf4j-simple:1.7.36")
 
+    // Lombok
     compileOnly("org.projectlombok:lombok:1.18.32")
     annotationProcessor("org.projectlombok:lombok:1.18.32")
     testCompileOnly("org.projectlombok:lombok:1.18.32")
     testAnnotationProcessor("org.projectlombok:lombok:1.18.32")
 
+    // Unit Test
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
+
+    // Testcontainers
+    testImplementation("org.testcontainers:junit-jupiter:1.20.1")
+    testImplementation("org.testcontainers:kafka:1.20.1")
+    testImplementation("org.testcontainers:mongodb:1.20.1")
+}
+
+sourceSets {
+    create("integrationTest") {
+        java.srcDir("src/test/java")
+        resources.srcDir("src/test/resources")
+
+        compileClasspath = files(
+            sourceSets["main"].output,
+            configurations.testRuntimeClasspath
+        )
+        runtimeClasspath = files(
+            output,
+            compileClasspath
+        )
+    }
+}
+
+configurations {
+    getByName("integrationTestImplementation").extendsFrom(configurations.testImplementation.get())
+    getByName("integrationTestRuntimeOnly").extendsFrom(configurations.testRuntimeOnly.get())
+}
+
+tasks.register<Test>("integrationTest") {
+    description = "Runs integration tests."
+    group = "verification"
+    testClassesDirs = sourceSets["integrationTest"].output.classesDirs
+    classpath = sourceSets["integrationTest"].runtimeClasspath
+    shouldRunAfter("test")
+    useJUnitPlatform()
+    testLogging {
+        events("PASSED", "FAILED", "SKIPPED")
+    }
 }
 
 tasks.withType<JavaCompile> {
@@ -49,6 +94,9 @@ tasks.withType<JavaCompile> {
 
 tasks.test {
     useJUnitPlatform()
+    testLogging {
+        events("PASSED", "FAILED", "SKIPPED")
+    }
 }
 
 tasks.jar {

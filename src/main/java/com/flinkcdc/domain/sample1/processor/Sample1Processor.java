@@ -13,11 +13,11 @@ public class Sample1Processor implements PipelineBuilder.ProcessorFunction<CdcEn
     @Override
     public DataStream<CdcEnvelop> process(DataStream<CdcEnvelop> input) {
         return input
-                .map(this::enrich)
+                .map(Sample1Processor::enrich)
                 .name("Sample1Processor");
     }
 
-    private CdcEnvelop enrich(CdcEnvelop envelop) {
+    private static CdcEnvelop enrich(CdcEnvelop envelop) {
         if (envelop == null) {
             return null;
         }
