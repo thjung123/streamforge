@@ -31,14 +31,6 @@ services:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: root
 
-  redis:
-    image: redis:7.2
-    container_name: redis
-    restart: always
-    ports:
-      - "6379:6379"
-    command: ["redis-server", "--appendonly", "yes"]
-
 networks:
   default:
     name: flink-cdc-network
