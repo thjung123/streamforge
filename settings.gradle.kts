@@ -12,4 +12,3 @@ plugins {
 }
 
 rootProject.name = "flink-cdc-pipeline"
-include("app")
