@@ -15,28 +15,22 @@ Each subsystem (savepoint, monitoring, recovery, etc.) will be documented increm
 
 ## System Architecture
 
-    +--------------+        +------------------+        +------------------+        +----------------+
-    |  Data Source | --->   |     Kafka Topic  | --->   |      Flink Job    | --->   |   Sink (DB/Cache) |
-    +--------------+        +------------------+        +------------------+        +----------------+
-                                  ▲                             │
-                                  │                             │
-                           (CDC producer)                  Stateful Processing
-                                                         (RocksDB + Checkpoints)
+    +--------------+        +------------------+        +----------------+
+    |  Data Source | --->   |   Processing     | --->   |     Sink       |
+    +--------------+        +------------------+        +----------------+
 **Data Flow Steps:**
 
-1. **Source (CDC / Producer)**
-    - Periodically pulls data from an external source (e.g., database or REST API)
-    - Publishes messages to a Kafka topic (`stock-stream`, etc.)
-
-2. **Streaming Layer (Flink)**
-    - Subscribes to Kafka topics as source
-    - Parses and transforms events into domain-specific models
-    - Applies filtering, enrichment, or aggregation logic
-    - Manages state using RocksDB backend with checkpointing
-
+1. **Source Layer**
+   - Continuously ingests change events from external systems (e.g., databases, REST APIs, or existing Kafka topics)
+   - Supports various CDC connectors or streaming producers for real-time data ingestion
+2. **Processing Layer (Flink)**
+   - Consumes streaming events from supported sources
+   - Parses and transforms records into domain-specific models
+   - Applies filtering, enrichment, windowing, or aggregation logic
+   - Maintains application state with checkpointing for fault tolerance
 3. **Sink Layer**
-    - Writes processed results into storage systems (MongoDB, Redis, etc.)
-    - Ensures exactly-once delivery with transactional guarantees
+   - Delivers processed results into downstream systems (e.g., MongoDB, Redis, Elasticsearch, or Kafka topics)
+   - Supports delivery guarantees (e.g., **exactly-once**) and ensures transactional consistency
 
 ---
 
