@@ -35,7 +35,7 @@ jobs:
         run: ./gradlew test --no-daemon --stacktrace
 
       - name: Run Integration Tests
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
         run: ./gradlew integrationTest --no-daemon --stacktrace
 
       - name: Upload Test Results
