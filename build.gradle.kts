@@ -34,6 +34,8 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-core:2.17.1")
     implementation("com.fasterxml.jackson.core:jackson-annotations:2.17.1")
 
+    implementation("org.apache.flink:flink-connector-mongodb:1.2.0-1.18")
+
     // Logging
     implementation("org.slf4j:slf4j-api:1.7.36")
     runtimeOnly("org.slf4j:slf4j-simple:1.7.36")
@@ -48,6 +50,9 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
+    testImplementation("org.mockito:mockito-core:5.11.0")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.11.0")
+    implementation("org.apache.flink:flink-connector-datagen:1.19.0")
 
     // Testcontainers
     testImplementation("org.testcontainers:junit-jupiter:1.20.1")
@@ -57,14 +62,14 @@ dependencies {
 
 sourceSets {
     create("integrationTest") {
-        java.srcDir("src/test/java")
-        resources.srcDir("src/test/resources")
+        java.srcDir("src/integrationTest/java")
+        resources.srcDir("src/integrationTest/resources")
 
-        compileClasspath = files(
+        compileClasspath += files(
             sourceSets["main"].output,
-            configurations.testRuntimeClasspath
+            configurations.testRuntimeClasspath.get()
         )
-        runtimeClasspath = files(
+        runtimeClasspath += files(
             output,
             compileClasspath
         )
@@ -83,6 +88,7 @@ tasks.register<Test>("integrationTest") {
     classpath = sourceSets["integrationTest"].runtimeClasspath
     shouldRunAfter("test")
     useJUnitPlatform()
+
     testLogging {
         events("PASSED", "FAILED", "SKIPPED")
     }
