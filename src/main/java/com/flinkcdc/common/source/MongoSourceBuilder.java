@@ -10,18 +10,28 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.bson.BsonDocument;
 import org.bson.Document;
 
+import java.io.Serial;
+import java.io.Serializable;
+
 import static com.flinkcdc.common.config.ConfigKeys.*;
 import static com.flinkcdc.common.config.ScopedConfig.*;
 
-public class MongoSourceBuilder implements PipelineBuilder.SourceBuilder<Document> {
+public class MongoSourceBuilder implements PipelineBuilder.SourceBuilder<Document>, Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Override
     public DataStream<Document> build(StreamExecutionEnvironment env) {
+        MongoSource<Document> source = createSource();
+        return env.fromSource(source, WatermarkStrategy.noWatermarks(), "MongoDBSource");
+    }
+
+    protected MongoSource<Document> createSource() {
         String uri = require(MONGO_URI);
         String dbName = require(MONGO_DB);
         String collection = require(MONGO_COLLECTION);
 
-        MongoSource<Document> source = MongoSource.<Document>builder()
+        return MongoSource.<Document>builder()
                 .setUri(uri)
                 .setDatabase(dbName)
                 .setCollection(collection)
@@ -37,7 +47,5 @@ public class MongoSourceBuilder implements PipelineBuilder.SourceBuilder<Documen
                     }
                 })
                 .build();
-
-        return env.fromSource(source, WatermarkStrategy.noWatermarks(), "MongoDBSource");
     }
 }

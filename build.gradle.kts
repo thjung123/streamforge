@@ -54,6 +54,8 @@ dependencies {
     testImplementation("org.mockito:mockito-junit-jupiter:5.11.0")
     implementation("org.apache.flink:flink-connector-datagen:1.19.0")
 
+    testImplementation("org.mockito:mockito-inline:5.2.0")
+    testImplementation("org.assertj:assertj-core:3.26.0")
     // Testcontainers
     testImplementation("org.testcontainers:junit-jupiter:1.20.1")
     testImplementation("org.testcontainers:kafka:1.20.1")
@@ -100,6 +102,19 @@ tasks.withType<JavaCompile> {
 
 tasks.test {
     useJUnitPlatform()
+    testLogging {
+        events("PASSED", "FAILED", "SKIPPED")
+    }
+}
+
+tasks.named<Test>("integrationTest") {
+    useJUnitPlatform()
+    jvmArgs(
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.time=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+    )
     testLogging {
         events("PASSED", "FAILED", "SKIPPED")
     }

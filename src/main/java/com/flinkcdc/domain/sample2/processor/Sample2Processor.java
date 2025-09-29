@@ -14,7 +14,7 @@ public class Sample2Processor implements PipelineBuilder.ProcessorFunction<CdcEn
     public DataStream<CdcEnvelop> process(DataStream<CdcEnvelop> input) {
         return input
                 .map(Sample2Processor::enrich)
-                .name("Sample1Processor");
+                .name("Sample2Processor");
     }
 
     private static CdcEnvelop enrich(CdcEnvelop envelop) {

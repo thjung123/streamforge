@@ -25,12 +25,19 @@ public class MongoSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop>
 
     static class MongoSinkFunction implements SinkFunction<CdcEnvelop> {
 
-        private transient MongoClient client;
-        private transient MongoCollection<Document> collection;
+        transient MongoClient client;
+        transient MongoCollection<Document> collection;
+
+        public MongoSinkFunction(MongoCollection<Document> collection) {
+            this.collection = collection;
+        }
+
+        public MongoSinkFunction() {}
+
 
         @Override
         public void invoke(CdcEnvelop value, Context context) {
-            if (client == null) {
+            if (collection == null) {
                 client = MongoClients.create(require(MONGO_URI));
                 MongoDatabase db = client.getDatabase(require(MONGO_DB));
                 collection = db.getCollection(require(MONGO_COLLECTION));
