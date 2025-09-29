@@ -7,7 +7,7 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  unit-test:
+  ci-tests:
     name: Unit + Integration Tests
     runs-on: ubuntu-latest
 
@@ -31,8 +31,12 @@ jobs:
       - name: Build
         run: ./gradlew clean assemble --no-daemon --stacktrace
 
-      - name: Run All Tests (unit + integration)
-        run: ./gradlew test integrationTest --no-daemon --stacktrace
+      - name: Run Unit Tests
+        run: ./gradlew test --no-daemon --stacktrace
+
+      - name: Run Integration Tests
+        if: github.ref == 'refs/heads/main'
+        run: ./gradlew integrationTest --no-daemon --stacktrace
 
       - name: Upload Test Results
         if: always()
