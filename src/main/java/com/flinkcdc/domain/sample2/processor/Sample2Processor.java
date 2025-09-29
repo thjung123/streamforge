@@ -1,4 +1,4 @@
-package com.flinkcdc.domain.sample1.processor;
+package com.flinkcdc.domain.sample2.processor;
 
 import com.flinkcdc.common.model.CdcEnvelop;
 import com.flinkcdc.common.pipeline.PipelineBuilder;
@@ -8,13 +8,13 @@ import java.time.Instant;
 import java.util.UUID;
 
 
-public class Sample1Processor implements PipelineBuilder.ProcessorFunction<CdcEnvelop, CdcEnvelop> {
+public class Sample2Processor implements PipelineBuilder.ProcessorFunction<CdcEnvelop, CdcEnvelop> {
 
     @Override
     public DataStream<CdcEnvelop> process(DataStream<CdcEnvelop> input) {
         return input
-                .map(Sample1Processor::enrich)
-                .name("Sample1Processor");
+                .map(Sample2Processor::enrich)
+                .name("Sample2Processor");
     }
 
     private static CdcEnvelop enrich(CdcEnvelop envelop) {

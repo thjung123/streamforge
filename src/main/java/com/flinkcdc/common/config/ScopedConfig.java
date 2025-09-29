@@ -7,19 +7,19 @@ public final class ScopedConfig {
     private static final Dotenv dotenv;
 
     static {
-        String env = System.getenv("APP_ENV");
-        String envFile = env != null ? ".env." + env : ".env";
         dotenv = Dotenv.configure()
-                .directory("src/main/resources")
-                .filename(envFile)
+                .directory(".")
+                .filename(".env")
                 .ignoreIfMissing()
                 .load();
+
+        System.out.println("[CONFIG] dotenv loaded: " + dotenv.entries().size() + " entries");
     }
 
     private ScopedConfig() {}
 
     public static String require(String key) {
-        String value = dotenv.get(key, System.getenv(key));
+        String value = System.getProperty(key, dotenv.get(key, System.getenv(key)));
         if (value == null || value.isBlank()) {
             throw new IllegalStateException("Missing required config: " + key);
         }
@@ -27,10 +27,15 @@ public final class ScopedConfig {
     }
 
     public static String getOrDefault(String key, String defaultValue) {
-        return dotenv.get(key, System.getenv(key) != null ? System.getenv(key) : defaultValue);
+        return System.getProperty(
+                key,
+                dotenv.get(key, System.getenv(key) != null ? System.getenv(key) : defaultValue)
+        );
     }
 
     public static boolean exists(String key) {
-        return dotenv.get(key) != null || System.getenv(key) != null;
+        return System.getProperty(key) != null
+                || dotenv.get(key) != null
+                || System.getenv(key) != null;
     }
 }
