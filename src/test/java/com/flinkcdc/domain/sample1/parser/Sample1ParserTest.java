@@ -27,7 +27,7 @@ class Sample1ParserTest {
         // then
         assertThat(result.getOperation()).isEqualTo("insert");
         assertThat(result.getSource()).isEqualTo("users");
-        assertThat(result.getPayload()).containsEntry("id", 1);
+        assertThat(result.getPayloadAsMap()).containsEntry("id", 1);
         assertThat(result.getEventTime()).isNotNull();
         assertThat(result.getProcessedTime()).isNotNull();
     }

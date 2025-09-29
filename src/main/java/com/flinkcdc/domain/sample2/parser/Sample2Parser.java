@@ -25,6 +25,7 @@ public class Sample2Parser implements PipelineBuilder.ParserFunction<String, Cdc
     @Override
     public DataStream<CdcEnvelop> parse(DataStream<String> input) {
         return input
+                .filter(json -> json != null && json.trim().startsWith("{") && json.trim().endsWith("}"))
                 .map(Sample2Parser::parseJson)
                 .filter(Objects::nonNull)
                 .name("Sample2Parser");
@@ -37,14 +38,14 @@ public class Sample2Parser implements PipelineBuilder.ParserFunction<String, Cdc
             return CdcEnvelop.builder()
                     .operation(envelop.getOperation())
                     .source(envelop.getSource())
-                    .payload(envelop.getPayload())
+                    .payloadJson(envelop.getPayloadJson())
                     .eventTime(envelop.getEventTime() != null ? envelop.getEventTime() : Instant.now())
                     .processedTime(Instant.now())
                     .traceId(envelop.getTraceId())
-                    .primaryKeys(envelop.getPrimaryKeys())
+                    .primaryKey(envelop.getPrimaryKey())
                     .build();
         } catch (Exception e) {
-            log.error("Failed to parse JSON: {}", json, e);
+            log.warn("Failed to parse JSON: {}", json, e);
             return null;
         }
     }

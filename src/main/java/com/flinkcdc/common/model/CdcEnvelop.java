@@ -9,9 +9,6 @@ import lombok.NoArgsConstructor;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 @Data
@@ -25,21 +22,22 @@ public class CdcEnvelop implements Serializable {
 
     private String operation;
     private String source;
-    private Map<String, Object> payload;
+    private String payloadJson;
     private Instant eventTime;
     private Instant processedTime;
     private String traceId;
-    private List<String> primaryKeys;
+    private String primaryKey;
 
-    public static CdcEnvelop of(String operation, String source, Map<String, Object> payload, List<String> primaryKeys) {
+    public static CdcEnvelop of(String operation, String source, Map<String, Object> payload, String primaryKey) {
         if (operation == null || source == null) {
             throw new IllegalArgumentException("operation and source must not be null");
         }
+
         return CdcEnvelop.builder()
                 .operation(operation)
                 .source(source)
-                .payload(payload == null ? null : new LinkedHashMap<>(payload))
-                .primaryKeys(primaryKeys == null ? null : new ArrayList<>(primaryKeys))
+                .payloadJson(payload != null ? JsonUtils.toJson(payload) : null)
+                .primaryKey(primaryKey)
                 .eventTime(Instant.now())
                 .processedTime(Instant.now())
                 .traceId(null)
@@ -56,5 +54,10 @@ public class CdcEnvelop implements Serializable {
 
     public String toJson() {
         return JsonUtils.toJson(this);
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getPayloadAsMap() {
+        return payloadJson != null ? JsonUtils.fromJson(payloadJson, Map.class) : null;
     }
 }

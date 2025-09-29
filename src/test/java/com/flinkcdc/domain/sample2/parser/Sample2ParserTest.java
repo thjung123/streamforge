@@ -34,7 +34,7 @@ class Sample2ParserTest {
         assertThat(result).isNotNull();
         assertThat(result.getOperation()).isEqualTo("insert");
         assertThat(result.getSource()).isEqualTo("orders");
-        assertThat(result.getPayload()).containsEntry("id", 123);
+        assertThat(result.getPayloadAsMap()).containsEntry("id", 123);
     }
 
     @Test
