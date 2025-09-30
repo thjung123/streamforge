@@ -4,6 +4,7 @@ import com.flinkcdc.common.model.CdcEnvelop;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -11,6 +12,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class KafkaSinkBuilderTest {
+
+    @BeforeAll
+    static void setUp() {
+        System.setProperty("DLQ_TOPIC", "test-dlq");
+        System.setProperty("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092");
+    }
 
     @Test
     void testWriteAddsKafkaSink() {
