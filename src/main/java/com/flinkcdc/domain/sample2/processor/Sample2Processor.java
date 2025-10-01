@@ -1,9 +1,15 @@
 package com.flinkcdc.domain.sample2.processor;
 
+import com.flinkcdc.common.config.ErrorCodes;
+import com.flinkcdc.common.config.MetricKeys;
 import com.flinkcdc.common.dlq.DLQPublisher;
+import com.flinkcdc.common.metric.Metrics;
 import com.flinkcdc.common.model.CdcEnvelop;
 import com.flinkcdc.common.model.DlqEvent;
 import com.flinkcdc.common.pipeline.PipelineBuilder;
+import com.flinkcdc.domain.sample2.Sample2Constants;
+import org.apache.flink.api.common.functions.RichMapFunction;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,24 +25,40 @@ public class Sample2Processor implements PipelineBuilder.ProcessorFunction<CdcEn
     @Override
     public DataStream<CdcEnvelop> process(DataStream<CdcEnvelop> input) {
         return input
-                .map(envelop -> {
-                    try {
-                        return enrich(envelop);
-                    } catch (Exception e) {
-                        log.error("Failed to process CdcEnvelop: {}", envelop, e);
-                        DlqEvent dlqEvent = DlqEvent.of(
-                                "PROCESSING_ERROR",
-                                e.getMessage(),
-                                "sample2-processor",
-                                envelop != null ? envelop.toJson() : null,
-                                e
-                        );
-                        DLQPublisher.getInstance().publish(dlqEvent);
-                        return null;
+                .map(new RichMapFunction<CdcEnvelop, CdcEnvelop>() {
+
+                    private transient Metrics metrics;
+
+                    @Override
+                    public void open(Configuration parameters) {
+                        metrics = new Metrics(getRuntimeContext(), Sample2Constants.JOB_NAME, Sample2Constants.PROCESSOR_NAME);
+                        DLQPublisher.getInstance().initMetrics(getRuntimeContext(), Sample2Constants.JOB_NAME);
+                    }
+
+                    @Override
+                    public CdcEnvelop map(CdcEnvelop envelop) {
+                        try {
+                            CdcEnvelop result = enrich(envelop);
+                            metrics.inc(MetricKeys.PROCESSOR_SUCCESS_COUNT);
+                            return result;
+                        } catch (Exception e) {
+                            metrics.inc(MetricKeys.PROCESSOR_ERROR_COUNT);
+                            log.error("Failed to process CdcEnvelop: {}", envelop, e);
+
+                            DlqEvent dlqEvent = DlqEvent.of(
+                                    ErrorCodes.PROCESSING_ERROR,
+                                    e.getMessage(),
+                                    Sample2Constants.PROCESSOR_NAME,
+                                    envelop != null ? envelop.toJson() : null,
+                                    e
+                            );
+                            DLQPublisher.getInstance().publish(dlqEvent);
+                            return null;
+                        }
                     }
                 })
                 .filter(Objects::nonNull)
-                .name("Sample2Processor");
+                .name(Sample2Constants.PROCESSOR_NAME);
     }
 
     private static CdcEnvelop enrich(CdcEnvelop envelop) {

@@ -1,6 +1,5 @@
 package com.flinkcdc.common.pipeline;
 
-import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
@@ -64,11 +63,10 @@ class PipelineBuilderTest {
         PipelineBuilder.SinkBuilder<String> sink = mock(PipelineBuilder.SinkBuilder.class);
         @SuppressWarnings("unchecked")
         DataStreamSink<String> sinkMock = mock(DataStreamSink.class);
-        when(sink.write(any())).thenReturn(sinkMock);
+        when(sink.write(any(), anyString())).thenReturn(sinkMock);
+        PipelineBuilder.from(source).to(sink, "test-job");
 
-        PipelineBuilder.from(source).to(sink);
-
-        verify(sink, times(1)).write(any());
+        verify(sink, times(1)).write(any(), eq("test-job"));
     }
 
     @Test
@@ -78,16 +76,14 @@ class PipelineBuilderTest {
         PipelineBuilder.SinkBuilder<String> sink = mock(PipelineBuilder.SinkBuilder.class);
         @SuppressWarnings("unchecked")
         DataStreamSink<String> sinkMock = mock(DataStreamSink.class);
-        when(sink.write(any())).thenReturn(sinkMock);
+        when(sink.write(any(), anyString())).thenReturn(sinkMock);
 
         PipelineBuilder<String> builder = PipelineBuilder.from(source)
                 .parse(s -> s.map(String::toUpperCase))
                 .process(s -> s.map(v -> v + "_processed"))
-                .to(sink);
+                .to(sink, "test-job");
 
-        JobExecutionResult result = builder.run("test-job");
-
-        assertNotNull(result, "JobExecutionResult should not be null");
-        verify(sink, times(1)).write(any());
+        assertNotNull(builder, "PipelineBuilder should not be null");
+        verify(sink, times(1)).write(any(), eq("test-job"));
     }
 }

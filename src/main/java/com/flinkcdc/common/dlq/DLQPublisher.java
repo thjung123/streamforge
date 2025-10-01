@@ -1,7 +1,10 @@
 package com.flinkcdc.common.dlq;
 
+import com.flinkcdc.common.config.MetricKeys;
+import com.flinkcdc.common.metric.Metrics;
 import com.flinkcdc.common.model.DlqEvent;
 import com.flinkcdc.common.utils.JsonUtils;
+import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -21,6 +24,7 @@ public class DLQPublisher {
     private final String topic;
     private static final Logger log = LoggerFactory.getLogger(DLQPublisher.class);
 
+    private transient Metrics metrics;
 
     private DLQPublisher() {
         this.topic = require(DLQ_TOPIC);
@@ -38,14 +42,25 @@ public class DLQPublisher {
         return instance;
     }
 
+    public void initMetrics(RuntimeContext ctx, String jobName) {
+        this.metrics = new Metrics(ctx, jobName, name());
+    }
+
     public void publish(DlqEvent event) {
         try {
             String json = JsonUtils.toJson(event);
             ProducerRecord<String, String> record = new ProducerRecord<>(topic, json);
             Future<RecordMetadata> future = producer.send(record);
             future.get();
+
+            if (metrics != null) {
+                metrics.inc(MetricKeys.DLQ_PUBLISHED_COUNT);
+            }
         } catch (Exception e) {
             log.error("[DLQ] Failed to publish event: {}", event, e);
+            if (metrics != null) {
+                metrics.inc(MetricKeys.DLQ_FAILED_COUNT);
+            }
         }
     }
 
@@ -55,5 +70,9 @@ public class DLQPublisher {
         props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         return props;
+    }
+
+    private String name() {
+        return "DLQPublisher";
     }
 }
