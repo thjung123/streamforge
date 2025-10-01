@@ -50,6 +50,7 @@ public class KafkaToMongoIntegrationTest {
         System.setProperty("MONGO_URI", mongo.getConnectionString());
         System.setProperty("MONGO_DB", "cdc_test");
         System.setProperty("MONGO_COLLECTION", "events");
+        System.setProperty("DLQ_TOPIC", "cdc-dlq");
     }
 
     @Test

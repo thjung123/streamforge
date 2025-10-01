@@ -1,31 +1,56 @@
 package com.flinkcdc.common.source;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+
+import com.flinkcdc.common.config.MetricKeys;
+import com.flinkcdc.common.metric.Metrics;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import java.lang.reflect.Field;
+
 import static org.mockito.Mockito.*;
-import org.apache.flink.streaming.api.datastream.DataStreamSource;
 
 class MongoSourceBuilderTest {
 
     @Test
-    void testBuildCreatesDataStream() {
+    void testMapIncrementsReadCount() throws Exception {
         // given
-        StreamExecutionEnvironment mockEnv = mock(StreamExecutionEnvironment.class);
-        DataStreamSource<Document> mockSource = mock(DataStreamSource.class);
+        MongoSourceBuilder.MetricCountingMap mapFunction = new MongoSourceBuilder.MetricCountingMap("test-job");
+        Metrics mockMetrics = mock(Metrics.class);
 
-        doReturn(mockSource)
-                .when(mockEnv)
-                .fromSource(any(), any(), any());
+        Field field = MongoSourceBuilder.MetricCountingMap.class.getDeclaredField("metrics");
+        field.setAccessible(true);
+        field.set(mapFunction, mockMetrics);
 
-        MongoSourceBuilder builder = new MongoSourceBuilder();
+        Document input = new Document("id", 1);
 
         // when
-        var result = builder.build(mockEnv);
+        mapFunction.map(input);
 
         // then
-        assertThat(result).isNotNull();
-        verify(mockEnv, times(1)).fromSource(any(), any(), eq("MongoDBSource"));
+        verify(mockMetrics, times(1)).inc(MetricKeys.SOURCE_READ_COUNT);
+        verify(mockMetrics, never()).inc(MetricKeys.SOURCE_ERROR_COUNT);
+    }
+
+    @Test
+    void testMapIncrementsErrorCountOnFailure() throws Exception {
+        // given
+        MongoSourceBuilder.MetricCountingMap mapFunction = new MongoSourceBuilder.MetricCountingMap("test-job");
+        Metrics mockMetrics = mock(Metrics.class);
+
+        Field field = MongoSourceBuilder.MetricCountingMap.class.getDeclaredField("metrics");
+        field.setAccessible(true);
+        field.set(mapFunction, mockMetrics);
+
+        doThrow(new RuntimeException("boom")).when(mockMetrics).inc(MetricKeys.SOURCE_READ_COUNT);
+
+        Document input = new Document("id", 2);
+
+        // when
+        try {
+            mapFunction.map(input);
+        } catch (RuntimeException ignored) {}
+
+        // then
+        verify(mockMetrics, times(1)).inc(MetricKeys.SOURCE_ERROR_COUNT);
     }
 }

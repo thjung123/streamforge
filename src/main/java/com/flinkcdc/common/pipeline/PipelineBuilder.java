@@ -51,6 +51,6 @@ public class PipelineBuilder<T> {
     }
 
     public interface SourceBuilder<T> {
-        DataStream<T> build(StreamExecutionEnvironment env);
+        DataStream<T> build(StreamExecutionEnvironment env, String jobName);
     }
 }

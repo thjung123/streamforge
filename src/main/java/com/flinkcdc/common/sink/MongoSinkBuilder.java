@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.flinkcdc.common.config.ConfigKeys.*;
+import static com.flinkcdc.common.config.ErrorCodes.SINK_ERROR;
 import static com.flinkcdc.common.config.ScopedConfig.*;
 
 public class MongoSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop> {
@@ -75,7 +76,7 @@ public class MongoSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop>
                 log.error("Mongo sink failed for envelop: {}", value, e);
 
                 DlqEvent dlqEvent = DlqEvent.of(
-                        "SINK_ERROR",
+                        SINK_ERROR,
                         e.getMessage(),
                         OPERATOR_NAME,
                         value != null ? value.toJson() : null,

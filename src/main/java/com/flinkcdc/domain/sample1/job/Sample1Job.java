@@ -21,7 +21,7 @@ public class Sample1Job implements FlinkJob {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         PipelineBuilder
-                .from(new MongoSourceBuilder().build(env))
+                .from(new MongoSourceBuilder().build(env, name()))
                 .parse(new Sample1Parser())
                 .process(new Sample1Processor())
                 .to(new KafkaSinkBuilder(), name());

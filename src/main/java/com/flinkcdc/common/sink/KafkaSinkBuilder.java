@@ -1,8 +1,9 @@
 package com.flinkcdc.common.sink;
 
-import com.flinkcdc.common.config.MetricKeys;
+import com.flinkcdc.common.dlq.DLQPublisher;
 import com.flinkcdc.common.metric.Metrics;
 import com.flinkcdc.common.model.CdcEnvelop;
+import com.flinkcdc.common.model.DlqEvent;
 import com.flinkcdc.common.pipeline.PipelineBuilder;
 import com.flinkcdc.common.utils.JsonUtils;
 import org.apache.flink.api.common.functions.RichMapFunction;
@@ -16,6 +17,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.flinkcdc.common.config.ConfigKeys.*;
+import static com.flinkcdc.common.config.ErrorCodes.SINK_ERROR;
+import static com.flinkcdc.common.config.MetricKeys.*;
 import static com.flinkcdc.common.config.ScopedConfig.*;
 
 public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop> {
@@ -50,16 +53,26 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop>
 
         @Override
         public void open(Configuration parameters) {
-            this.metrics = new Metrics(getRuntimeContext(), jobName, MetricKeys.KAFKA);
+            this.metrics = new Metrics(getRuntimeContext(), jobName, KAFKA);
+            DLQPublisher.getInstance().initMetrics(getRuntimeContext(), jobName);
         }
 
         @Override
         public CdcEnvelop map(CdcEnvelop envelop) {
             try {
-                metrics.inc(MetricKeys.SINK_SUCCESS_COUNT);
+                metrics.inc(SINK_SUCCESS_COUNT);
                 return envelop;
             } catch (Exception e) {
-                metrics.inc(MetricKeys.SINK_ERROR_COUNT);
+                log.error("Kafka sink failed for envelop: {}", envelop, e);
+                metrics.inc(SINK_ERROR_COUNT);
+                DlqEvent dlqEvent = DlqEvent.of(
+                        SINK_ERROR,
+                        e.getMessage(),
+                        OPERATOR_NAME,
+                        envelop != null ? envelop.toJson() : null,
+                        e
+                );
+                DLQPublisher.getInstance().publish(dlqEvent);
                 throw e;
             }
         }
