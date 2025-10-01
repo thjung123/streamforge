@@ -30,16 +30,10 @@ public class PipelineBuilder<T> {
         return new PipelineBuilder<>(this.env, processed);
     }
 
-    public PipelineBuilder<T> to(SinkBuilder<T> sink) {
-        sink.write(stream);
+    public PipelineBuilder<T> to(SinkBuilder<T> sink, String jobName) {
+        sink.write(stream, jobName);
         return this;
     }
-
-
-    public JobExecutionResult run(String jobName) throws Exception {
-        return this.env.execute(jobName);
-    }
-
 
     @FunctionalInterface
     public interface ParserFunction<I, O> {
@@ -53,10 +47,10 @@ public class PipelineBuilder<T> {
 
     @FunctionalInterface
     public interface SinkBuilder<T> {
-        DataStreamSink<T> write(DataStream<T> stream);
+        DataStreamSink<T> write(DataStream<T> stream, String jobName);
     }
 
     public interface SourceBuilder<T> {
-        DataStream<T> build(StreamExecutionEnvironment env);
+        DataStream<T> build(StreamExecutionEnvironment env, String jobName);
     }
 }

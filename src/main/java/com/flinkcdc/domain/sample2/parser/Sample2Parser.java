@@ -4,14 +4,21 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.flinkcdc.common.config.ErrorCodes;
+import com.flinkcdc.common.config.MetricKeys;
+import com.flinkcdc.common.dlq.DLQPublisher;
+import com.flinkcdc.common.metric.Metrics;
 import com.flinkcdc.common.model.CdcEnvelop;
+import com.flinkcdc.common.model.DlqEvent;
 import com.flinkcdc.common.pipeline.PipelineBuilder;
+import com.flinkcdc.domain.sample2.Sample2Constants;
+import org.apache.flink.api.common.functions.RichMapFunction;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
 
 public class Sample2Parser implements PipelineBuilder.ParserFunction<String, CdcEnvelop> {
@@ -22,31 +29,56 @@ public class Sample2Parser implements PipelineBuilder.ParserFunction<String, Cdc
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
+
     @Override
     public DataStream<CdcEnvelop> parse(DataStream<String> input) {
         return input
                 .filter(json -> json != null && json.trim().startsWith("{") && json.trim().endsWith("}"))
-                .map(Sample2Parser::parseJson)
+                .map(new RichMapFunction<String, CdcEnvelop>() {
+                    private transient Metrics metrics;
+
+                    @Override
+                    public void open(Configuration parameters) {
+                        metrics = new Metrics(getRuntimeContext(), Sample2Constants.JOB_NAME, Sample2Constants.PARSER_NAME);
+                        DLQPublisher.getInstance().initMetrics(getRuntimeContext(), Sample2Constants.JOB_NAME);
+                    }
+
+                    @Override
+                    public CdcEnvelop map(String json) {
+                        try {
+                            CdcEnvelop env = parseJson(json);
+                            metrics.inc(MetricKeys.PARSER_SUCCESS_COUNT);
+                            return env;
+                        } catch (Exception e) {
+                            metrics.inc(MetricKeys.PARSER_ERROR_COUNT);
+                            log.warn("Failed to parse JSON: {}", json, e);
+                            DlqEvent dlqEvent = DlqEvent.of(
+                                    ErrorCodes.PARSING_ERROR,
+                                    e.getMessage(),
+                                    Sample2Constants.PARSER_NAME,
+                                    json,
+                                    e
+                            );
+                            DLQPublisher.getInstance().publish(dlqEvent);
+                            return null;
+                        }
+                    }
+                })
                 .filter(Objects::nonNull)
-                .name("Sample2Parser");
+                .name(Sample2Constants.PARSER_NAME);
     }
 
-    static CdcEnvelop parseJson(String json) {
-        try {
-            CdcEnvelop envelop = MAPPER.readValue(json, CdcEnvelop.class);
+    static CdcEnvelop parseJson(String json) throws Exception {
+        CdcEnvelop envelop = MAPPER.readValue(json, CdcEnvelop.class);
 
-            return CdcEnvelop.builder()
-                    .operation(envelop.getOperation())
-                    .source(envelop.getSource())
-                    .payloadJson(envelop.getPayloadJson())
-                    .eventTime(envelop.getEventTime() != null ? envelop.getEventTime() : Instant.now())
-                    .processedTime(Instant.now())
-                    .traceId(envelop.getTraceId())
-                    .primaryKey(envelop.getPrimaryKey())
-                    .build();
-        } catch (Exception e) {
-            log.warn("Failed to parse JSON: {}", json, e);
-            return null;
-        }
+        return CdcEnvelop.builder()
+                .operation(envelop.getOperation())
+                .source(envelop.getSource())
+                .payloadJson(envelop.getPayloadJson())
+                .eventTime(envelop.getEventTime() != null ? envelop.getEventTime() : Instant.now())
+                .processedTime(Instant.now())
+                .traceId(envelop.getTraceId())
+                .primaryKey(envelop.getPrimaryKey())
+                .build();
     }
 }

@@ -1,22 +1,17 @@
 package com.flinkcdc.domain.sample2.parser;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.flinkcdc.common.model.CdcEnvelop;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 class Sample2ParserTest {
-
-    private final Sample2Parser parser = new Sample2Parser();
 
     @Test
     void testParse_validJson_shouldReturnCdcEnvelop() throws Exception {
@@ -38,14 +33,13 @@ class Sample2ParserTest {
     }
 
     @Test
-    void testParse_invalidJson_shouldReturnNull() {
+    void testParse_invalidJson_shouldReturnNull() throws Exception {
         // given
         String invalidJson = "{invalid-json}";
 
-        // when
-        CdcEnvelop result = Sample2Parser.parseJson(invalidJson);
+        assertThatThrownBy(() -> Sample2Parser.parseJson(invalidJson))
+                .isInstanceOf(Exception.class)
+                .hasMessageContaining("Unexpected character");
 
-        // then
-        assertThat(result).isNull();
     }
 }

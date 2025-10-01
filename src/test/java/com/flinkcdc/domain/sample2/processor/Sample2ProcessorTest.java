@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 class Sample2ProcessorUnitTest {
 
@@ -51,13 +52,12 @@ class Sample2ProcessorUnitTest {
     }
 
     @Test
-    void enrich_shouldReturnNull_whenInputIsNull() {
-        // when
-        CdcEnvelop result = invokeEnrich(null);
-
-        // then
-        assertThat(result).isNull();
+    void enrich_shouldThrowException_whenInputIsNull() {
+        assertThatThrownBy(() -> invokeEnrich(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Envelop cannot be null");
     }
+
 
     private CdcEnvelop invokeEnrich(CdcEnvelop envelop) {
         try {
@@ -65,7 +65,14 @@ class Sample2ProcessorUnitTest {
             method.setAccessible(true);
             return (CdcEnvelop) method.invoke(null, envelop);
         } catch (Exception e) {
+            if (e.getCause() != null) {
+                if (e.getCause() instanceof RuntimeException re) {
+                    throw re;
+                }
+                throw new RuntimeException(e.getCause());
+            }
             throw new RuntimeException(e);
         }
     }
+
 }
