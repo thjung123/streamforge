@@ -22,7 +22,4 @@ public final class MetricKeys {
     public static final String KAFKA = "kafka";
     public static final String MONGO = "mongo";
 
-    public static String of(String prefix, String key) {
-        return prefix + "." + key;
-    }
 }
