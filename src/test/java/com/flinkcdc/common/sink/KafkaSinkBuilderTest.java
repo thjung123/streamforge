@@ -1,43 +1,30 @@
 package com.flinkcdc.common.sink;
 
+import com.flinkcdc.common.metric.Metrics;
 import com.flinkcdc.common.model.CdcEnvelop;
-import org.apache.flink.api.connector.sink2.Sink;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.DataStreamSink;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class KafkaSinkBuilderTest {
 
-    @BeforeAll
-    static void setUp() {
-        System.setProperty("DLQ_TOPIC", "test-dlq");
-        System.setProperty("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092");
-    }
-
     @Test
-    void testWriteAddsKafkaSink() {
-        // given
-        @SuppressWarnings("unchecked")
-        DataStream<CdcEnvelop> mockStream = mock(DataStream.class);
-        @SuppressWarnings("unchecked")
-        DataStreamSink<CdcEnvelop> mockSink = mock(DataStreamSink.class);
+    void testMapIncrementsSuccessMetric() throws Exception {
+        KafkaSinkBuilder.MetricsMapFunction mapFunction = new KafkaSinkBuilder.MetricsMapFunction("test-job");
 
-        when(mockStream.sinkTo(any(Sink.class))).thenReturn(mockSink);
-        when(mockSink.name(anyString())).thenReturn(mockSink);
+        Metrics mockMetrics = mock(Metrics.class);
+        var metricsField = mapFunction.getClass().getDeclaredField("metrics");
+        metricsField.setAccessible(true);
+        metricsField.set(mapFunction, mockMetrics);
 
-        KafkaSinkBuilder builder = new KafkaSinkBuilder();
+        CdcEnvelop envelop = CdcEnvelop.builder()
+                .operation("INSERT")
+                .payloadJson("{\"id\":1}")
+                .build();
 
-        // when
-        DataStreamSink<CdcEnvelop> result = builder.write(mockStream);
+        mapFunction.map(envelop);
 
-        // then
-        assertThat(result).isNotNull();
-        verify(mockStream, times(1)).sinkTo(any(Sink.class));
-        verify(mockSink, times(1)).name("KafkaSink");
+        verify(mockMetrics, times(1)).inc("sink.success_count");
+        verify(mockMetrics, never()).inc("sink.error_count");
     }
 }
