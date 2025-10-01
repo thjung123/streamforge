@@ -1,0 +1,12 @@
+package com.flinkcdc.common.config;
+
+public final class ErrorCodes {
+
+    private ErrorCodes() {}
+
+    public static final String PARSING_ERROR = "PARSING_ERROR";
+    public static final String PROCESSING_ERROR = "PROCESSING_ERROR";
+    public static final String SINK_ERROR = "SINK_ERROR";
+    public static final String SOURCE_ERROR = "SOURCE_ERROR";
+    public static final String DLQ_ERROR = "DLQ_ERROR";
+}
