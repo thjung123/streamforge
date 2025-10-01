@@ -13,5 +13,6 @@ public final class ConfigKeys {
     public static final String MONGO_DB = "MONGO_DB";
     public static final String MONGO_COLLECTION = "MONGO_COLLECTION";
 
+    public static final String DLQ_TOPIC = "DLQ_TOPIC";
     public static final String APP_ENV = "APP_ENV";
 }

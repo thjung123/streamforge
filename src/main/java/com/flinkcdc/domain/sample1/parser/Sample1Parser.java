@@ -2,7 +2,9 @@ package com.flinkcdc.domain.sample1.parser;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.flinkcdc.common.dlq.DLQPublisher;
 import com.flinkcdc.common.model.CdcEnvelop;
+import com.flinkcdc.common.model.DlqEvent;
 import com.flinkcdc.common.pipeline.PipelineBuilder;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.bson.Document;
@@ -25,6 +27,14 @@ public class Sample1Parser implements PipelineBuilder.ParserFunction<Document, C
                         return MAPPER.convertValue(doc, CdcEnvelop.class);
                     } catch (Exception e) {
                         log.warn("Failed to convert Mongo Document to CdcEnvelop: {}", doc, e);
+                        DlqEvent dlqEvent = DlqEvent.of(
+                                "PARSING_ERROR",
+                                e.getMessage(),
+                                "sample1-parser",
+                                doc.toJson(),
+                                e
+                        );
+                        DLQPublisher.getInstance().publish(dlqEvent);
                         return null;
                     }
                 })
