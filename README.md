@@ -40,3 +40,23 @@ The project uses a single `.env` file for local development, testing, and as a d
 This file contains baseline settings used when no external configuration is provided.
 
 In real deployments (e.g. staging or production), values in `.env` are typically overridden by environment variables or JVM system properties provided by the deployment platform (such as Kubernetes, Docker, or a secrets manager like Vault).
+
+## Running Locally
+
+This project is designed primarily to demonstrate **architecture, design patterns, and production-grade pipeline structure**, rather than to provide a runnable demo.
+
+However, you can still run it locally for experimentation:
+
+```bash
+docker-compose up -d       # Start Kafka, MongoDB, and other dependencies
+./gradlew run              # Launch the Flink CDC pipeline
+```
+
+
+## Deployment
+
+Deployment manifests (e.g., Kubernetes `FlinkDeployment` resources, Helm charts) are not included in this repository,  
+as the focus is on the **application design and CDC pipeline structure**.
+
+In a production environment, the pipeline would typically be deployed as a Flink Application on Kubernetes,  
+integrated with a configuration provider (e.g., Vault), and monitored via Prometheus/Grafana.
