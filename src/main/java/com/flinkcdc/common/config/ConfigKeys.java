@@ -6,8 +6,7 @@ public final class ConfigKeys {
     private ConfigKeys() {}
 
     public static final String KAFKA_BOOTSTRAP_SERVERS = "KAFKA_BOOTSTRAP_SERVERS";
-    public static final String KAFKA_SOURCE_TOPIC = "KAFKA_SOURCE_TOPIC";
-    public static final String KAFKA_SINK_TOPIC = "KAFKA_SINK_TOPIC";
+    public static final String CDC_TOPIC = "CDC_TOPIC";
 
     public static final String MONGO_URI = "MONGO_URI";
     public static final String MONGO_DB = "MONGO_DB";

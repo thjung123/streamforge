@@ -15,6 +15,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.Properties;
 
 import static com.flinkcdc.common.config.ConfigKeys.*;
 import static com.flinkcdc.common.config.ErrorCodes.SINK_ERROR;
@@ -30,16 +31,36 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop>
     public DataStreamSink<CdcEnvelop> write(DataStream<CdcEnvelop> stream, String jobName) {
         return stream
                 .map(new MetricsMapFunction(jobName))
-                .sinkTo(KafkaSink.<CdcEnvelop>builder()
-                        .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
-                        .setRecordSerializer(KafkaRecordSerializationSchema.<CdcEnvelop>builder()
-                                .setTopic(require(KAFKA_SINK_TOPIC))
-                                .setValueSerializationSchema(envelop -> JsonUtils.toJson(envelop).getBytes())
-                                .build())
-                        .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
-                        .build())
+                .sinkTo(buildKafkaSink())
                 .name(OPERATOR_NAME);
     }
+
+    private static KafkaSink<CdcEnvelop> buildKafkaSink() {
+        return KafkaSink.<CdcEnvelop>builder()
+                .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
+                .setRecordSerializer(KafkaRecordSerializationSchema.<CdcEnvelop>builder()
+                        .setTopic(require(CDC_TOPIC))
+                        .setValueSerializationSchema(envelop -> JsonUtils.toJson(envelop).getBytes())
+                        .build())
+                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
+                .setKafkaProducerConfig(defaultProducerConfig())
+                .build();
+    }
+
+    private static Properties defaultProducerConfig() {
+        Properties props = new Properties();
+        props.setProperty("acks", "all");
+        props.setProperty("retries", "10");
+        props.setProperty("compression.type", "snappy");
+        props.setProperty("batch.size", "32768");
+        props.setProperty("linger.ms", "50");
+        props.setProperty("max.in.flight.requests.per.connection", "1");
+        props.setProperty("max.block.ms", "120000");
+        props.setProperty("delivery.timeout.ms", "180000");
+        props.setProperty("request.timeout.ms", "120000");
+        return props;
+    }
+
 
     static class MetricsMapFunction extends RichMapFunction<CdcEnvelop, CdcEnvelop> {
 

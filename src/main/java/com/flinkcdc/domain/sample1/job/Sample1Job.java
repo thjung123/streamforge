@@ -3,7 +3,7 @@ package com.flinkcdc.domain.sample1.job;
 import com.flinkcdc.common.launcher.FlinkJob;
 import com.flinkcdc.common.pipeline.PipelineBuilder;
 import com.flinkcdc.common.sink.KafkaSinkBuilder;
-import com.flinkcdc.common.source.MongoSourceBuilder;
+import com.flinkcdc.common.source.CustomMongoCdcSource;
 import com.flinkcdc.domain.sample1.Sample1Constants;
 import com.flinkcdc.domain.sample1.parser.Sample1Parser;
 import com.flinkcdc.domain.sample1.processor.Sample1Processor;
@@ -19,9 +19,9 @@ public class Sample1Job implements FlinkJob {
 
     private StreamExecutionEnvironment buildPipeline() {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-
+        env.setParallelism(1);
         PipelineBuilder
-                .from(new MongoSourceBuilder().build(env, name()))
+                .from(new CustomMongoCdcSource().build(env, name()))
                 .parse(new Sample1Parser())
                 .process(new Sample1Processor())
                 .to(new KafkaSinkBuilder(), name());

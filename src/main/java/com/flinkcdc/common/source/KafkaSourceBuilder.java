@@ -23,7 +23,7 @@ public class KafkaSourceBuilder implements PipelineBuilder.SourceBuilder<String>
     public DataStream<String> build(StreamExecutionEnvironment env, String jobName) {
         KafkaSource<String> source = KafkaSource.<String>builder()
                 .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
-                .setTopics(require(KAFKA_SOURCE_TOPIC))
+                .setTopics(require(CDC_TOPIC))
                 .setGroupId("cdc-group")
                 .setStartingOffsets(OffsetsInitializer.earliest())
                 .setValueOnlyDeserializer(new SimpleStringSchema())

@@ -20,6 +20,7 @@ public class Sample2Job implements FlinkJob {
 
     public StreamExecutionEnvironment buildPipeline() {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
 
         PipelineBuilder
                 .from(new KafkaSourceBuilder().build(env, name()))
