@@ -1,4 +1,4 @@
-package com.flinkcdc.domain.sample1.parser;
+package com.flinkcdc.domain.mongo_to_kafka.parser;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -9,7 +9,7 @@ import com.flinkcdc.common.metric.Metrics;
 import com.flinkcdc.common.model.CdcEnvelop;
 import com.flinkcdc.common.model.DlqEvent;
 import com.flinkcdc.common.pipeline.PipelineBuilder;
-import com.flinkcdc.domain.sample1.Sample1Constants;
+import com.flinkcdc.domain.mongo_to_kafka.MongoToKafkaConstants;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -22,9 +22,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
-public class Sample1Parser implements PipelineBuilder.ParserFunction<Document, CdcEnvelop> {
+public class MongoToKafkaParser implements PipelineBuilder.ParserFunction<Document, CdcEnvelop> {
 
-    private static final Logger log = LoggerFactory.getLogger(Sample1Parser.class);
+    private static final Logger log = LoggerFactory.getLogger(MongoToKafkaParser.class);
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
@@ -37,14 +37,14 @@ public class Sample1Parser implements PipelineBuilder.ParserFunction<Document, C
 
                     @Override
                     public void open(Configuration parameters) {
-                        metrics = new Metrics(getRuntimeContext(), Sample1Constants.JOB_NAME, Sample1Constants.PARSER_NAME);
-                        DLQPublisher.getInstance().initMetrics(getRuntimeContext(), Sample1Constants.JOB_NAME);
+                        metrics = new Metrics(getRuntimeContext(), MongoToKafkaConstants.JOB_NAME, MongoToKafkaConstants.PARSER_NAME);
+                        DLQPublisher.getInstance().initMetrics(getRuntimeContext(), MongoToKafkaConstants.JOB_NAME);
                     }
 
                     @Override
                     public CdcEnvelop map(Document doc) {
                         try {
-                            CdcEnvelop env = Sample1Parser.from(doc);
+                            CdcEnvelop env = MongoToKafkaParser.from(doc);
                             metrics.inc(MetricKeys.PARSER_SUCCESS_COUNT);
                             return env;
                         } catch (Exception e) {
@@ -54,7 +54,7 @@ public class Sample1Parser implements PipelineBuilder.ParserFunction<Document, C
                             DlqEvent dlqEvent = DlqEvent.of(
                                     ErrorCodes.PARSING_ERROR,
                                     e.getMessage(),
-                                    Sample1Constants.PARSER_NAME,
+                                    MongoToKafkaConstants.PARSER_NAME,
                                     doc.toJson(),
                                     e
                             );
@@ -64,7 +64,7 @@ public class Sample1Parser implements PipelineBuilder.ParserFunction<Document, C
                     }
                 })
                 .filter(Objects::nonNull)
-                .name(Sample1Constants.PARSER_NAME);
+                .name(MongoToKafkaConstants.PARSER_NAME);
     }
 
     public static CdcEnvelop from(Document doc) {

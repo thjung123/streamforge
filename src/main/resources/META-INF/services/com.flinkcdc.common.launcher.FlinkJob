@@ -1,2 +1,2 @@
-com.flinkcdc.domain.sample1.job.Sample1Job
+com.flinkcdc.domain.mongo_to_kafka.job.MongoToKafkaJob
 com.flinkcdc.domain.sample2.job.Sample2Job

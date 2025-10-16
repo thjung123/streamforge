@@ -1,8 +1,8 @@
-package com.flinkcdc.domain.sample1;
+package com.flinkcdc.domain.mongo_to_kafka;
 
-public final class Sample1Constants {
+public final class MongoToKafkaConstants {
 
-    private Sample1Constants() {}
+    private MongoToKafkaConstants() {}
 
     public static final String JOB_NAME = "sample1";
 

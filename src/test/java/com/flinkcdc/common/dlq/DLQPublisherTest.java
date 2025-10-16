@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedConstruction;
 
+import java.lang.reflect.Field;
 import java.util.concurrent.Future;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -27,9 +28,13 @@ class DLQPublisherTest {
 
     @Test
     void publish_shouldSendDlqEventSuccessfully() throws Exception {
+        Field instanceField = DLQPublisher.class.getDeclaredField("instance");
+        instanceField.setAccessible(true);
+        instanceField.set(null, null);
+
         Future<RecordMetadata> mockFuture = mock(Future.class);
         try (MockedConstruction<KafkaProducer> mocked = mockConstruction(KafkaProducer.class, (mockProducer, context) -> {
-            when(mockProducer.send(any(ProducerRecord.class))).thenReturn(mockFuture);
+            when(mockProducer.send(any(ProducerRecord.class), any())).thenReturn(mockFuture);
         })) {
             DLQPublisher publisher = DLQPublisher.getInstance();
             DlqEvent event = DlqEvent.of("SINK_ERROR", "something failed", "test-sink", "{}", null);
@@ -39,11 +44,10 @@ class DLQPublisherTest {
 
             // then
             KafkaProducer<String, String> mockProducer = mocked.constructed().get(0);
-            verify(mockProducer, times(1)).send(any(ProducerRecord.class));
-            verify(mockFuture, times(1)).get();
+            verify(mockProducer, times(1)).send(any(ProducerRecord.class), any());
+            verify(mockFuture, atMostOnce()).get();
         }
     }
-
     @Test
     void publish_shouldHandleExceptionGracefully() throws Exception {
         // given

@@ -1,4 +1,4 @@
-package com.flinkcdc.domain.sample1.processor;
+package com.flinkcdc.domain.mongo_to_kafka.processor;
 
 import com.flinkcdc.common.model.CdcEnvelop;
 import org.junit.jupiter.api.Test;
@@ -9,7 +9,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class Sample1ProcessorTest {
+class MongoToKafkaProcessorTest {
 
     @Test
     void enrich_shouldSetProcessedTimeAndGenerateTraceId_whenTraceIdIsNull() {
@@ -59,7 +59,7 @@ class Sample1ProcessorTest {
 
     private CdcEnvelop invokeEnrich(CdcEnvelop envelop) {
         try {
-            var method = Sample1Processor.class.getDeclaredMethod("enrich", CdcEnvelop.class);
+            var method = MongoToKafkaProcessor.class.getDeclaredMethod("enrich", CdcEnvelop.class);
             method.setAccessible(true);
             return (CdcEnvelop) method.invoke(null, envelop);
         } catch (Exception e) {
