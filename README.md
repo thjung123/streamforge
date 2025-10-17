@@ -34,6 +34,40 @@ Each subsystem (savepoint, monitoring, recovery, etc.) will be documented increm
 
 ---
 
+## Kafka as the Central Durable Layer
+
+All pipelines in this repository are designed around Kafka as the central data backbone.
+This is a deliberate design choice for durability, observability, and operational resilience.
+
+
+#### Rationale:
+- High Durability & Replayability
+  - Kafka persists all CDC events durably, allowing downstream jobs to replay or reprocess data deterministically in case of failure or schema evolution.
+- Decoupling of Upstream and Downstream
+  - By routing every change event through Kafka, the system naturally separates the data ingestion flow (Mongo → Kafka) from the data delivery flow (Kafka → Target DB).
+  - This prevents cascading failures and enables independent scaling or redeployment of each job. 
+- Fault Isolation & Recovery
+  - If a downstream sink fails or needs maintenance, upstream pipelines can continue running — events remain in Kafka until consumption resumes.
+  - Combined with Flink checkpointing, this provides end-to-end fault tolerance.
+- Unified CDC Format
+ - Every event published to Kafka follows a standardized envelope (CdcEnvelop), containing metadata such as operation type, event time, and trace ID.
+ - This ensures consistent parsing and monitoring across all domains.
+
+Canonical pipeline pattern:
+```
+Source (CDC) → Parser → Processor → Kafka
+Kafka → Parser → Processor → Sink (DB, Redis, etc.)
+```
+
+Kafka thus serves both as:
+- Sink for upstream CDC ingestion jobs, and
+- Source for downstream delivery or analytical pipelines.
+
+This architecture scales well across multiple teams and domains, allowing new sinks or processors to be added without impacting upstream data producers.
+
+---
+
+
 ## Configuration
 
 The project uses a single `.env` file for local development, testing, and as a default configuration source.
@@ -49,7 +83,7 @@ However, you can still run it locally for experimentation:
 
 ```bash
 docker-compose up -d       # Start Kafka, MongoDB, and other dependencies
-./gradlew run              # Launch the Flink CDC pipeline
+java -jar build/libs/app-all.jar MongoToKafka
 ```
 
 
