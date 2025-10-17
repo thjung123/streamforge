@@ -6,6 +6,7 @@ import com.flinkcdc.common.pipeline.PipelineBuilder;
 import com.flinkcdc.common.source.util.NoSplit;
 import com.flinkcdc.common.source.util.NoSplitEnumerator;
 import com.flinkcdc.common.source.util.NoSplitSerializer;
+import com.mongodb.MongoException;
 import com.mongodb.client.*;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
@@ -103,12 +104,9 @@ public class CustomMongoCdcSource implements PipelineBuilder.SourceBuilder<Docum
                 client = MongoClients.create(uri);
                 MongoDatabase db = client.getDatabase(dbName);
                 MongoCollection<Document> coll = db.getCollection(collName);
-                Document ping = new Document("ping", 1);
-                db.runCommand(ping);
-                System.out.println("[TEST] instance=" + this.hashCode());
 
                 for (Document doc : coll.find().limit(3)) {
-                    System.out.println("[TEST] Sample doc: " + doc.toJson());
+                    System.out.println("[INIT] Sample doc: " + doc.toJson());
                 }
 
                 MongoCollection<Document> collection = client.getDatabase(dbName).getCollection(collName);
@@ -150,8 +148,16 @@ public class CustomMongoCdcSource implements PipelineBuilder.SourceBuilder<Docum
                         .append("fullDocument", fullDocument)
                         .append("eventTime", change.getClusterTime());
 
+                // BsonDocument resumeToken = change.getResumeToken();
+                // TODO: saveResumeToken(resumeToken);
                 output.collect(event);
                 return InputStatus.MORE_AVAILABLE;
+            } catch (MongoException ex) {
+                log.warn("[MongoCDC] Lost connection to MongoDB, retrying in 3s...", ex);
+                safeCloseCursor();
+                Thread.sleep(3000);
+                reconnect();
+                return InputStatus.NOTHING_AVAILABLE;
             } catch (Exception e) {
                 log.error("[MongoCDC] Error reading change stream event", e);
                 DlqEvent dlqEvent = DlqEvent.of(
@@ -195,5 +201,21 @@ public class CustomMongoCdcSource implements PipelineBuilder.SourceBuilder<Docum
                 log.warn("[MongoCDC] Error while closing resources", e);
             }
         }
+
+
+        private void reconnect() {
+            String uri = require(MONGO_URI);
+            String dbName = getOrDefault(MONGO_DB, MONGO_DB);
+            String collName = getOrDefault(MONGO_COLLECTION, MONGO_COLLECTION);
+            client = MongoClients.create(uri);
+            cursor = client.getDatabase(dbName).getCollection(collName).watch().cursor();
+            log.info("[MongoCDC] Reconnected to MongoDB: {}.{}", dbName, collName);
+        }
+
+        private void safeCloseCursor() {
+            try { if (cursor != null) cursor.close(); } catch (Exception ignored) {}
+            try { if (client != null) client.close(); } catch (Exception ignored) {}
+        }
     }
+
 }

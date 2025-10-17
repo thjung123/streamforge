@@ -4,8 +4,8 @@ public final class MongoToKafkaConstants {
 
     private MongoToKafkaConstants() {}
 
-    public static final String JOB_NAME = "sample1";
+    public static final String JOB_NAME = "MongoToKafka";
 
-    public static final String PARSER_NAME = "Sample1Parser";
-    public static final String PROCESSOR_NAME = "Sample1Processor";
+    public static final String PARSER_NAME = "MongoToKafkaParser";
+    public static final String PROCESSOR_NAME = "MongoToKafkaProcessor";
 }

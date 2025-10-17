@@ -11,6 +11,7 @@ import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 
 import static com.flinkcdc.common.config.ConfigKeys.*;
 import static com.flinkcdc.common.config.ScopedConfig.*;
@@ -25,7 +26,7 @@ public class KafkaSourceBuilder implements PipelineBuilder.SourceBuilder<String>
                 .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
                 .setTopics(require(CDC_TOPIC))
                 .setGroupId("cdc-group")
-                .setStartingOffsets(OffsetsInitializer.earliest())
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.LATEST))
                 .setValueOnlyDeserializer(new SimpleStringSchema())
                 .build();
 

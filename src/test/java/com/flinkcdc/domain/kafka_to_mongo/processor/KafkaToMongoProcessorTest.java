@@ -1,4 +1,4 @@
-package com.flinkcdc.domain.sample2.processor;
+package com.flinkcdc.domain.kafka_to_mongo.processor;
 
 import com.flinkcdc.common.model.CdcEnvelop;
 import org.junit.jupiter.api.Test;
@@ -61,7 +61,7 @@ class Sample2ProcessorUnitTest {
 
     private CdcEnvelop invokeEnrich(CdcEnvelop envelop) {
         try {
-            var method = Sample2Processor.class.getDeclaredMethod("enrich", CdcEnvelop.class);
+            var method = KafkaToMongoProcessor.class.getDeclaredMethod("enrich", CdcEnvelop.class);
             method.setAccessible(true);
             return (CdcEnvelop) method.invoke(null, envelop);
         } catch (Exception e) {

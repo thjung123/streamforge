@@ -1,4 +1,4 @@
-package com.flinkcdc.domain.sample2.parser;
+package com.flinkcdc.domain.kafka_to_mongo.parser;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -11,7 +11,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
-class Sample2ParserTest {
+class KafkaToMongoParserTest {
 
     @Test
     void testParse_validJson_shouldReturnCdcEnvelop() throws Exception {
@@ -23,7 +23,7 @@ class Sample2ParserTest {
                 .writeValueAsString(envelop);
 
         // when
-        CdcEnvelop result = Sample2Parser.parseJson(json);
+        CdcEnvelop result = KafkaToMongoParser.parseJson(json);
 
         // then
         assertThat(result).isNotNull();
@@ -37,7 +37,7 @@ class Sample2ParserTest {
         // given
         String invalidJson = "{invalid-json}";
 
-        assertThatThrownBy(() -> Sample2Parser.parseJson(invalidJson))
+        assertThatThrownBy(() -> KafkaToMongoParser.parseJson(invalidJson))
                 .isInstanceOf(Exception.class)
                 .hasMessageContaining("Unexpected character");
 

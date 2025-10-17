@@ -83,7 +83,7 @@ However, you can still run it locally for experimentation:
 
 ```bash
 docker-compose up -d       # Start Kafka, MongoDB, and other dependencies
-java -jar build/libs/app-all.jar sample1
+java -jar build/libs/app-all.jar MongoToKafka
 ```
 
 

@@ -17,7 +17,7 @@ public class MongoToKafkaJob implements FlinkJob {
         return MongoToKafkaConstants.JOB_NAME;
     }
 
-    private StreamExecutionEnvironment buildPipeline() {
+    public StreamExecutionEnvironment buildPipeline() {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         PipelineBuilder
