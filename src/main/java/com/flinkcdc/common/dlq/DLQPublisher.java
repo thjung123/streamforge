@@ -50,12 +50,24 @@ public class DLQPublisher {
         try {
             String json = JsonUtils.toJson(event);
             ProducerRecord<String, String> record = new ProducerRecord<>(topic, json);
-            Future<RecordMetadata> future = producer.send(record);
-            future.get();
 
-            if (metrics != null) {
-                metrics.inc(MetricKeys.DLQ_PUBLISHED_COUNT);
-            }
+            producer.send(record, (metadata, exception) -> {
+                if (exception != null) {
+                    log.error("[DLQ] Failed to publish event asynchronously: {}", event, exception);
+                    if (metrics != null) {
+                        metrics.inc(MetricKeys.DLQ_FAILED_COUNT);
+                    }
+                } else {
+                    if (metrics != null) {
+                        metrics.inc(MetricKeys.DLQ_PUBLISHED_COUNT);
+                    }
+                    if (log.isDebugEnabled()) {
+                        log.debug("[DLQ] Published to {} partition={} offset={}",
+                                metadata.topic(), metadata.partition(), metadata.offset());
+                    }
+                }
+            });
+
         } catch (Exception e) {
             log.error("[DLQ] Failed to publish event: {}", event, e);
             if (metrics != null) {

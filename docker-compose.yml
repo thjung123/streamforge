@@ -27,6 +27,9 @@ services:
     restart: always
     ports:
       - "27017:27017"
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    networks:
+      - default
 
 networks:
   default:

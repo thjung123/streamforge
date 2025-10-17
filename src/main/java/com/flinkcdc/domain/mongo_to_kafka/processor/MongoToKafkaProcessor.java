@@ -1,4 +1,4 @@
-package com.flinkcdc.domain.sample2.processor;
+package com.flinkcdc.domain.mongo_to_kafka.processor;
 
 import com.flinkcdc.common.config.ErrorCodes;
 import com.flinkcdc.common.config.MetricKeys;
@@ -7,7 +7,7 @@ import com.flinkcdc.common.metric.Metrics;
 import com.flinkcdc.common.model.CdcEnvelop;
 import com.flinkcdc.common.model.DlqEvent;
 import com.flinkcdc.common.pipeline.PipelineBuilder;
-import com.flinkcdc.domain.sample2.Sample2Constants;
+import com.flinkcdc.domain.mongo_to_kafka.MongoToKafkaConstants;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -18,9 +18,9 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-public class Sample2Processor implements PipelineBuilder.ProcessorFunction<CdcEnvelop, CdcEnvelop> {
+public class MongoToKafkaProcessor implements PipelineBuilder.ProcessorFunction<CdcEnvelop, CdcEnvelop> {
 
-    private static final Logger log = LoggerFactory.getLogger(Sample2Processor.class);
+    private static final Logger log = LoggerFactory.getLogger(MongoToKafkaProcessor.class);
 
     @Override
     public DataStream<CdcEnvelop> process(DataStream<CdcEnvelop> input) {
@@ -31,8 +31,8 @@ public class Sample2Processor implements PipelineBuilder.ProcessorFunction<CdcEn
 
                     @Override
                     public void open(Configuration parameters) {
-                        metrics = new Metrics(getRuntimeContext(), Sample2Constants.JOB_NAME, Sample2Constants.PROCESSOR_NAME);
-                        DLQPublisher.getInstance().initMetrics(getRuntimeContext(), Sample2Constants.JOB_NAME);
+                        metrics = new Metrics(getRuntimeContext(), MongoToKafkaConstants.JOB_NAME, MongoToKafkaConstants.PROCESSOR_NAME);
+                        DLQPublisher.getInstance().initMetrics(getRuntimeContext(), MongoToKafkaConstants.JOB_NAME);
                     }
 
                     @Override
@@ -48,7 +48,7 @@ public class Sample2Processor implements PipelineBuilder.ProcessorFunction<CdcEn
                             DlqEvent dlqEvent = DlqEvent.of(
                                     ErrorCodes.PROCESSING_ERROR,
                                     e.getMessage(),
-                                    Sample2Constants.PROCESSOR_NAME,
+                                    MongoToKafkaConstants.PROCESSOR_NAME,
                                     envelop != null ? envelop.toJson() : null,
                                     e
                             );
@@ -58,20 +58,18 @@ public class Sample2Processor implements PipelineBuilder.ProcessorFunction<CdcEn
                     }
                 })
                 .filter(Objects::nonNull)
-                .name(Sample2Constants.PROCESSOR_NAME);
+                .name(MongoToKafkaConstants.PROCESSOR_NAME);
     }
 
     private static CdcEnvelop enrich(CdcEnvelop envelop) {
         if (envelop == null) {
-            throw new IllegalArgumentException("Envelop cannot be null during processing");
+            return null;
         }
-
         envelop.setProcessedTime(Instant.now());
 
         if (envelop.getTraceId() == null || envelop.getTraceId().isEmpty()) {
             envelop.setTraceId("trace-" + UUID.randomUUID());
         }
-
         return envelop;
     }
 }

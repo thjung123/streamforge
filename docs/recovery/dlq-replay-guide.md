@@ -29,11 +29,12 @@ This guide covers:
 
 ## 3. Failure Categories & Required Actions
 
-| Stage (Pipeline) | Type              | Meaning                              | Required Action                                         |
-|------------------|-------------------|---------------------------------------|---------------------------------------------------------|
-| Source (Parser)  | `PARSING_ERROR`   | Event could not be deserialized       | Fix source schema or input format, then replay         |
-| Processor        | `PROCESSING_ERROR`| Transformation logic failed           | Fix business logic and redeploy, then replay           |
-| Sink (Writer)    | `SINK_ERROR`      | Event failed to write downstream      | Fix sink configuration or connectivity, then replay    |
+| Stage (Pipeline) | Type               | Meaning                                                    | Required Action                                                                 |
+|------------------|--------------------|-------------------------------------------------------------|---------------------------------------------------------------------------------|
+| Source (Parser)  | `PARSING_ERROR`    | Event could not be parsed or serialized properly             | Fix schema or input format, then replay from DLQ                                |
+| Source (System)  | `SOURCE_FAILURE`   | Source connector or ChangeStream failure (e.g., network, auth, timeout) | Investigate root cause and rely on Flink’s restart policy (no DLQ replay)       |
+| Processor        | `PROCESSING_ERROR` | Transformation or enrichment logic failed                   | Fix business logic, redeploy job, then replay from DLQ                          |
+| Sink (Writer)    | `SINK_ERROR`       | Event failed to write to downstream system                  | Fix sink configuration or connectivity, then replay_
 
 ---
 
