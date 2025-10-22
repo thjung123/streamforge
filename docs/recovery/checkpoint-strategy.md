@@ -74,7 +74,6 @@ With this setup:
 
 - At-least-once delivery is guaranteed by default.
 - To achieve exactly-once, sinks must support idempotent writes or transactional commits.
-- For external systems like Redis or JDBC, additional idempotency logic may be required.
 
 ---
 
@@ -86,14 +85,36 @@ With this setup:
 
 ---
 
-## 7. Savepoint Automation (CLI Tools)
+## 7. Operator-Driven Savepoint Management
 
-Use helper scripts to automate savepoint lifecycle in CI/CD or manual operations:
+In Kubernetes-based deployments, the **Flink Operator** ensures safe and consistent state transitions during job lifecycle events such as upgrades, restarts, or controlled shutdowns.
 
-```bash
-# Trigger savepoint for a running job
-./scripts/trigger_savepoint.sh <job_id>
+This section defines how savepoints are managed and recovered in production environments.
 
-# Restore job from a specific savepoint
-./scripts/restore_from_savepoint.sh <savepoint_path>
+---
+
+### 7.1 Automatic Savepoint on Job Cancel
+
+When `kubernetes.operator.job.cancel.mode: savepoint` is enabled, the Operator ensures that every controlled stop (e.g., redeploy, upgrade, rollback) produces a consistent **savepoint** before terminating the job.
+
+```yaml
+spec:
+  flinkConfiguration:
+    kubernetes.operator.job.cancel.mode: savepoint
+    kubernetes.operator.job.savepoint.cleanup: retain
 ```
+
+**Behavior**:
+
+- **On Cancel or Upgrade**: A savepoint is triggered automatically and stored under state.savepoints.dir (e.g., s3://flink-checkpoints/savepoints).
+- **On Restart**: The Operator restores from the latest valid savepoint.
+- **Retention**: Savepoints are retained unless cleaned by lifecycle rules or manual action.
+
+### 7.2 Operational Workflow
+
+| Step | Action | Description |
+|------|---------|-------------|
+| **1. Deploy** | Apply or sync `FlinkDeployment` | Operator starts the job with checkpointing and savepoint configuration. |
+| **2. Upgrade** | Modify job spec or image | Operator automatically takes a savepoint, cancels the current job, and restores the new job from that savepoint. |
+| **3. Failure Recovery** | Handled automatically | Operator recovers from the latest checkpoint; if unavailable, it restores from the most recent savepoint. |
+| **4. Retention Policy** | Periodic cleanup | S3 lifecycle rules automatically expire old savepoints; critical ones can be tagged and retained longer. |

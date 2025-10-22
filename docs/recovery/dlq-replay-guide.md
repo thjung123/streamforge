@@ -1,81 +1,106 @@
 # DLQ Replay Guide
 
-This document defines the design, operational policies, and replay procedures for handling events stored in the **Dead Letter Queue (DLQ)** within the Flink CDC pipeline.  
-DLQ ensures that failed events are retained safely, so they can be reprocessed manually once the root cause is fixed.
+This document defines the **DLQ (Dead Letter Queue) replay procedure** used in the Flink CDC pipeline.  
+It explains how failed events stored in DLQ topics are safely validated and reprocessed using a controlled replay workflow.
 
 ---
 
 ## 1. Purpose & Scope
 
-The DLQ is a dedicated **Kafka topic** that stores events which failed during ingestion, processing, or sink operations.  
-It ensures no data is lost and allows manual reprocessing once the root cause of the failure has been resolved.
+The **Dead Letter Queue (DLQ)** temporarily stores events that failed during parsing, transformation, or sink operations.  
+It ensures data durability and allows manual reprocessing once the underlying issue has been fixed.
 
 This guide covers:
-- DLQ purpose and usage policy
-- Failure categories and required actions
-- Replay prerequisites and decision checklist
-- Step-by-step replay workflow
-- Automation script usage
+- DLQ operational policy
+- Replay prerequisites
+- Airflow-based replay workflow
+- Post-replay verification and monitoring
 
 ---
 
 ## 2. DLQ Design & Policy
 
-- DLQ is implemented as a dedicated Kafka topic
-- Events must **never** be replayed automatically — **manual intervention** is always required.
-- Replay should occur **only after** the root cause has been resolved and downstream systems are ready to process messages.
+- Each pipeline maintains its own **Kafka DLQ topic** (e.g., `cdc.<pipeline>.dlq`).
+- Events in DLQ are **not reprocessed automatically**.
+- Replay should only occur **after** the cause of failure has been identified and fixed.
+- Retention is typically **7–14 days** to allow safe recovery without backlog growth.
 
 ---
 
-## 3. Failure Categories & Required Actions
+## 3. Failure Categories
 
-| Stage (Pipeline) | Type               | Meaning                                                    | Required Action                                                                 |
-|------------------|--------------------|-------------------------------------------------------------|---------------------------------------------------------------------------------|
-| Source (Parser)  | `PARSING_ERROR`    | Event could not be parsed or serialized properly             | Fix schema or input format, then replay from DLQ                                |
-| Source (System)  | `SOURCE_FAILURE`   | Source connector or ChangeStream failure (e.g., network, auth, timeout) | Investigate root cause and rely on Flink’s restart policy (no DLQ replay)       |
-| Processor        | `PROCESSING_ERROR` | Transformation or enrichment logic failed                   | Fix business logic, redeploy job, then replay from DLQ                          |
-| Sink (Writer)    | `SINK_ERROR`       | Event failed to write to downstream system                  | Fix sink configuration or connectivity, then replay_
-
----
-
-## 4. Replay Prerequisites
-
-Replay must be performed **only when all of the following conditions are met**:
-
-- All schema or deserialization issues have been fixed.
-- Transformation logic bugs have been resolved.
-- Downstream systems are healthy and ready to receive data.
+| Stage | Error Type | Description | Resolution |
+|--------|-------------|--------------|-------------|
+| **Source** | `PARSING_ERROR` | Failed to deserialize or parse input | Fix schema or input format, redeploy, then replay |
+| **Processor** | `PROCESSING_ERROR` | Transformation or enrichment logic failed | Patch and redeploy pipeline, then replay |
+| **Sink** | `SINK_ERROR` | Failed to write to Redis/JDBC/S3 | Fix configuration or connection, then replay |
 
 ---
 
-## 5. Replay Workflow
+## 4. Replay Preconditions
 
-Follow this sequence to prevent inconsistent state or data corruption.
+Before running a replay, ensure that:
 
-### Step 1: Diagnose and Fix
+1. The root cause has been identified and fixed (schema, code, sink config, etc.).
+2. DLQ messages have been inspected and validated.
+3. Downstream systems are healthy and can accept data.
+4. Monitoring and alerting are active to observe replay status.
+5. Replay range and batch size are clearly defined.
 
-- Inspect messages in the DLQ topic
-- Review job logs to identify the root cause.
-- Apply the necessary fixes (e.g., schema, transformation logic, or sink configuration).
+---
 
-### Step 2: Replay Events
+## 5. Replay Architecture
 
-Once the root cause is resolved, replay the failed events back into the original source topic using the helper script:
+DLQ replay in production is handled through a **dedicated Airflow DAG** or **on-demand batch job**.  
+This approach ensures safe reprocessing, observability, and operational control.
 
-```bash
-./scripts/replay_dlq.sh <dlq_topic> <source_topic> <bootstrap_server>
+### 5.1 Overview
+```
+DLQ Kafka Topic
+│
+▼
+Replay DAG (Airflow)
+├── Validate Batch
+├── Transform / Deduplicate
+├── Replay to Source Topic
+└── Monitor & Log Results
 ```
 
-**Example:**
-``` bash
-./scripts/replay_dlq.sh cdc-dlq cdc-topic kafka:9092
-```
 
-Replay must always happen only after the underlying issue is fixed and the pipeline is ready to process events correctly.
+### 5.2 Features
 
+- Schema and data validation before replay
+- Controlled batch replay (by partition or time window)
+- Isolation from streaming jobs to prevent backpressure
+- Logging of replay metadata (topic, offsets, batch size, timestamp)
 
-## 6. Operational Notes
+---
 
-- Never replay messages if you are unsure whether the issue is fully resolved.
-- Coordinate with downstream service owners before replaying a large batch of DLQ data.
-- Keep track of replay attempts and message volume for audit and debugging purposes.
+## 6. Operational Workflow
+
+| Step | Phase | Description |
+|------|--------|-------------|
+| **1. Diagnose** | Identify error type and DLQ volume using logs or metrics. |
+| **2. Validate** | Inspect sample DLQ messages, verify format and schema. |
+| **3. Fix & Redeploy** | Patch the job and confirm new version runs cleanly. |
+| **4. Run Replay DAG** | Replay validated messages back into the source topic. |
+| **5. Monitor** | Track replay throughput, DLQ growth, and sink latency. |
+| **6. Verify & Cleanup** | Confirm all records processed; clean DLQ if resolved. |
+
+---
+
+## 7. Replay DAG Example (Conceptual)
+
+| Operator | Purpose | Notes |
+|-----------|----------|-------|
+| `DlqValidateOperator` | Validates message structure and schema | Fails early on invalid payloads |
+| `KafkaReplayOperator` | Re-ingests messages to source topic | Batch replay with offset control |
+| `ReplayAuditOperator` | Records replay metrics and metadata | Logs to S3 or internal DB |
+
+---
+
+## Summary
+
+DLQ replay is a **manual, controlled operation** designed for safe recovery.  
+All replays should be performed after validation and monitoring setup,  
+preferably through Airflow or batch workflows rather than direct Kafka commands.
