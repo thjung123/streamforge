@@ -7,8 +7,8 @@ RUN gradle clean jar --no-daemon
 FROM openjdk:17-jdk-slim
 WORKDIR /app
 
-COPY --from=builder /build/build/libs/app-all.jar /app/app.jar
+COPY --from=builder /build/build/libs/streamforge.jar /app/streamforge.jar
 COPY .env /app/.env
 
 
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-cp", "/app/streamforge.jar"]

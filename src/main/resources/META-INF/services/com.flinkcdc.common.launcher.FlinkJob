@@ -1,2 +1,0 @@
-com.flinkcdc.domain.mongo_to_kafka.job.MongoToKafkaJob
-com.flinkcdc.domain.kafka_to_mongo.job.KafkaToMongoJob

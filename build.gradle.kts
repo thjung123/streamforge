@@ -1,6 +1,19 @@
+import net.ltgt.gradle.errorprone.errorprone
+
 plugins {
     id("java")
-    id("application")
+    id("com.diffplug.spotless") version "7.0.2"
+    id("net.ltgt.errorprone") version "4.1.0"
+}
+
+spotless {
+    java {
+        target("src/*/java/**/*.java")
+        googleJavaFormat("1.19.2")
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
 }
 
 java {
@@ -14,53 +27,74 @@ repositories {
     maven("https://packages.confluent.io/maven/")
 }
 
+val flinkVersion = "1.20.0"
+
 dependencies {
     // Flink core
-    implementation("org.apache.flink:flink-streaming-java:1.19.0")
-    implementation("org.apache.flink:flink-clients:1.19.0")
-    implementation("org.apache.flink:flink-connector-base:1.19.0")
-    implementation("org.apache.flink:flink-connector-kafka:3.2.0-1.19")
+    implementation("org.apache.flink:flink-streaming-java:$flinkVersion")
+    implementation("org.apache.flink:flink-clients:$flinkVersion")
+    implementation("org.apache.flink:flink-connector-base:$flinkVersion")
+    implementation("org.apache.flink:flink-connector-kafka:3.3.0-1.20")
+    implementation("org.apache.flink:flink-connector-mongodb:1.2.0-1.18")
+    implementation("org.apache.flink:flink-connector-datagen:$flinkVersion")
 
     // Utilities
-    implementation("org.jsoup:jsoup:1.17.2")
-    implementation("io.github.cdimascio:dotenv-java:3.0.0")
+    implementation("org.jsoup:jsoup:1.18.1")
+    implementation("io.github.cdimascio:dotenv-java:3.1.0")
 
     // External clients
-    implementation("io.lettuce:lettuce-core:6.3.0.RELEASE")
-    implementation("redis.clients:jedis:3.6.3")
-    implementation("org.mongodb:mongodb-driver-sync:4.11.1")
+    implementation("io.lettuce:lettuce-core:6.3.2.RELEASE")
+    implementation("redis.clients:jedis:5.1.0")
+    implementation("org.mongodb:mongodb-driver-sync:4.11.4")
 
     // Jackson
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.1")
-    implementation("com.fasterxml.jackson.core:jackson-core:2.17.1")
-    implementation("com.fasterxml.jackson.core:jackson-annotations:2.17.1")
-
-    implementation("org.apache.flink:flink-connector-mongodb:1.2.0-1.18")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
+    implementation("com.fasterxml.jackson.core:jackson-core:2.18.2")
+    implementation("com.fasterxml.jackson.core:jackson-annotations:2.18.2")
 
     // Logging
     implementation("org.slf4j:slf4j-api:1.7.36")
     runtimeOnly("org.slf4j:slf4j-simple:1.7.36")
 
+    // ErrorProne
+    errorprone("com.google.errorprone:error_prone_core:2.36.0")
+
     // Lombok
-    compileOnly("org.projectlombok:lombok:1.18.32")
-    annotationProcessor("org.projectlombok:lombok:1.18.32")
-    testCompileOnly("org.projectlombok:lombok:1.18.32")
-    testAnnotationProcessor("org.projectlombok:lombok:1.18.32")
+    compileOnly("org.projectlombok:lombok:1.18.36")
+    annotationProcessor("org.projectlombok:lombok:1.18.36")
+    testCompileOnly("org.projectlombok:lombok:1.18.36")
+    testAnnotationProcessor("org.projectlombok:lombok:1.18.36")
 
     // Unit Test
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
-    testImplementation("org.mockito:mockito-core:5.11.0")
-    testImplementation("org.mockito:mockito-junit-jupiter:5.11.0")
-    implementation("org.apache.flink:flink-connector-datagen:1.19.0")
-
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.3")
+    testImplementation("org.mockito:mockito-core:5.14.2")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.14.2")
     testImplementation("org.mockito:mockito-inline:5.2.0")
-    testImplementation("org.assertj:assertj-core:3.26.0")
+    testImplementation("org.assertj:assertj-core:3.27.0")
+
     // Testcontainers
-    testImplementation("org.testcontainers:junit-jupiter:1.20.1")
-    testImplementation("org.testcontainers:kafka:1.20.1")
-    testImplementation("org.testcontainers:mongodb:1.20.1")
+    testImplementation("org.testcontainers:junit-jupiter:1.21.4")
+    testImplementation("org.testcontainers:kafka:1.21.4")
+    testImplementation("org.testcontainers:mongodb:1.21.4")
+}
+
+// Force transitive dependency overrides for CVEs
+configurations.all {
+    resolutionStrategy {
+        force(
+            "org.apache.commons:commons-compress:1.27.1",
+            "org.apache.commons:commons-lang3:3.17.0",
+            "commons-io:commons-io:2.18.0",
+            "io.netty:netty-handler:4.1.115.Final",
+            "io.netty:netty-common:4.1.115.Final",
+            "io.netty:netty-codec:4.1.115.Final",
+            "io.netty:netty-transport:4.1.115.Final",
+            "io.netty:netty-buffer:4.1.115.Final",
+            "io.netty:netty-resolver:4.1.115.Final"
+        )
+    }
 }
 
 sourceSets {
@@ -99,6 +133,10 @@ tasks.register<Test>("integrationTest") {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+    options.errorprone {
+        disableWarningsInGeneratedCode.set(true)
+        disable("MissingSummary", "InlineMeSuggester")
+    }
 }
 
 tasks.test {
@@ -130,13 +168,9 @@ tasks.named<Test>("integrationTest") {
 }
 
 tasks.jar {
-    archiveBaseName.set("app-all")
+    archiveBaseName.set("streamforge")
     archiveVersion.set("")
     archiveClassifier.set("")
-
-    manifest {
-        attributes["Main-Class"] = "com.flinkcdc.App"
-    }
 
     from({
         configurations.runtimeClasspath.get()

@@ -6,5 +6,5 @@
 build
 .idea
 .idea/**
-
+/docs/concepts/*
 **/local_test

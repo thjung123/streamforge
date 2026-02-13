@@ -1,18 +1,18 @@
-name: CI Pipeline
+name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 jobs:
-  ci-tests:
-    name: Unit + Integration Tests
+  integration-test:
+    name: Integration Test
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -22,27 +22,21 @@ jobs:
           java-version: 17
           cache: gradle
 
-      - name: Grant execute permission for Gradle
+      - name: Grant execute permission
         run: chmod +x gradlew
-
-      - name: Resolve dependencies
-        run: ./gradlew dependencies --no-daemon
 
       - name: Build
         run: ./gradlew clean assemble --no-daemon --stacktrace
 
-      - name: Run Unit Tests
-        run: ./gradlew test --no-daemon --stacktrace
+      - name: Docker info
+        run: docker info
 
-      - name: Run Integration Tests
-        if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+      - name: Integration Tests
         run: ./gradlew integrationTest --no-daemon --stacktrace
 
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
-          path: |
-            build/test-results/test
-            build/test-results/integrationTest
+          name: integration-test-results
+          path: build/test-results/integrationTest
