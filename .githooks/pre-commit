@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+echo "==> Running Spotless lint check..."
+./gradlew spotlessCheck --no-daemon -q
+
+# Find test classes corresponding to staged Java source files
+TEST_FILTERS=""
+for file in $(git diff --cached --name-only --diff-filter=ACM -- 'src/main/java/**/*.java'); do
+    # src/main/java/com/streamforge/core/Foo.java → src/test/java/com/streamforge/core/FooTest.java
+    test_file=$(echo "$file" | sed 's|src/main/java/|src/test/java/|;s|\.java$|Test.java|')
+    if [ -f "$test_file" ]; then
+        class=$(echo "$test_file" | sed 's|src/test/java/||;s|\.java$||;s|/|.|g')
+        TEST_FILTERS="$TEST_FILTERS --tests $class"
+    fi
+done
+
+if [ -n "$TEST_FILTERS" ]; then
+    echo "==> Running unit tests for changed files..."
+    # shellcheck disable=SC2086
+    ./gradlew test $TEST_FILTERS --no-daemon -q
+fi
+
+echo "==> All checks passed."
