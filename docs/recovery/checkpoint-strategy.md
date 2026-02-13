@@ -118,3 +118,4 @@ spec:
 | **2. Upgrade** | Modify job spec or image | Operator automatically takes a savepoint, cancels the current job, and restores the new job from that savepoint. |
 | **3. Failure Recovery** | Handled automatically | Operator recovers from the latest checkpoint; if unavailable, it restores from the most recent savepoint. |
 | **4. Retention Policy** | Periodic cleanup | S3 lifecycle rules automatically expire old savepoints; critical ones can be tagged and retained longer. |
+````

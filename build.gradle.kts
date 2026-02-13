@@ -1,6 +1,5 @@
 plugins {
     id("java")
-    id("application")
 }
 
 java {
@@ -130,13 +129,9 @@ tasks.named<Test>("integrationTest") {
 }
 
 tasks.jar {
-    archiveBaseName.set("app-all")
+    archiveBaseName.set("streamforge")
     archiveVersion.set("")
     archiveClassifier.set("")
-
-    manifest {
-        attributes["Main-Class"] = "com.flinkcdc.App"
-    }
 
     from({
         configurations.runtimeClasspath.get()
