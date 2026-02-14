@@ -28,6 +28,8 @@ public final class MetricKeys {
   public static final String DEDUP_PASS_COUNT = "dedup.pass_count";
   public static final String DEDUP_DUPLICATE_COUNT = "dedup.duplicate_count";
 
+  public static final String LATENCY_ALERT_COUNT = "latency.alert_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }
