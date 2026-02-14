@@ -4,9 +4,14 @@ import com.streamforge.connector.kafka.KafkaSinkBuilder;
 import com.streamforge.connector.mongo.MongoChangeStreamSource;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
+import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
 import com.streamforge.job.sync.cdc.parser.MongoToKafkaParser;
 import com.streamforge.job.sync.cdc.processor.MongoToKafkaProcessor;
+import com.streamforge.pattern.dedup.Deduplicator;
+import com.streamforge.pattern.filter.FilterInterceptor;
+import com.streamforge.pattern.observability.LatencyDetector;
+import java.time.Duration;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -26,6 +31,11 @@ public class MongoToKafkaJob implements StreamJob {
     env.setParallelism(1);
     PipelineBuilder.from(new MongoChangeStreamSource().build(env, name()))
         .parse(new MongoToKafkaParser())
+        .apply(new FilterInterceptor<>(e -> !"unknown".equals(e.getOperation())))
+        .apply(
+            new Deduplicator<>(
+                e -> e.getPrimaryKey() + ":" + e.getEventTime(), Duration.ofMinutes(10)))
+        .apply(new LatencyDetector<>(StreamEnvelop::getEventTime, Duration.ofSeconds(30)))
         .process(new MongoToKafkaProcessor())
         .to(new KafkaSinkBuilder(), name());
 

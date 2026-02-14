@@ -1,9 +1,6 @@
 #!/bin/sh
 set -e
 
-echo "==> Running Spotless lint check..."
-./gradlew spotlessCheck --no-daemon -q
-
 # Find test classes corresponding to staged Java source files
 TEST_FILTERS=""
 for file in $(git diff --cached --name-only --diff-filter=ACM -- 'src/main/java/**/*.java'); do
@@ -15,10 +12,13 @@ for file in $(git diff --cached --name-only --diff-filter=ACM -- 'src/main/java/
     fi
 done
 
+TASKS="spotlessCheck"
 if [ -n "$TEST_FILTERS" ]; then
-    echo "==> Running unit tests for changed files..."
-    # shellcheck disable=SC2086
-    ./gradlew test $TEST_FILTERS --no-daemon -q
+    TASKS="$TASKS test"
 fi
+
+echo "==> Running pre-commit checks..."
+# shellcheck disable=SC2086
+./gradlew $TASKS $TEST_FILTERS -q
 
 echo "==> All checks passed."

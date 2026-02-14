@@ -19,6 +19,17 @@ public final class MetricKeys {
   public static final String SOURCE_READ_COUNT = "source.read_count";
   public static final String SOURCE_ERROR_COUNT = "source.error_count";
 
+  public static final String FILTER_PASS_COUNT = "filter.pass_count";
+  public static final String FILTER_DROP_COUNT = "filter.drop_count";
+
+  public static final String CONSTRAINT_PASS_COUNT = "constraint.pass_count";
+  public static final String CONSTRAINT_VIOLATION_COUNT = "constraint.violation_count";
+
+  public static final String DEDUP_PASS_COUNT = "dedup.pass_count";
+  public static final String DEDUP_DUPLICATE_COUNT = "dedup.duplicate_count";
+
+  public static final String LATENCY_ALERT_COUNT = "latency.alert_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }

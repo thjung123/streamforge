@@ -7,6 +7,8 @@ import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.pipeline.PipelineBuilder;
 import com.streamforge.job.sync.cdc.parser.KafkaToMongoParser;
 import com.streamforge.job.sync.cdc.processor.KafkaToMongoProcessor;
+import com.streamforge.pattern.quality.ConstraintEnforcer;
+import com.streamforge.pattern.quality.rules.NotNullRule;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -27,6 +29,7 @@ public class KafkaToMongoJob implements StreamJob {
 
     PipelineBuilder.from(new KafkaSourceBuilder().build(env, name()))
         .parse(new KafkaToMongoParser())
+        .apply(new ConstraintEnforcer<>(new NotNullRule("_id")))
         .process(new KafkaToMongoProcessor())
         .to(new MongoSinkBuilder(), name());
     return env;

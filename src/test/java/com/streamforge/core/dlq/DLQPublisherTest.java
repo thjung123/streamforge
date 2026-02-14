@@ -5,67 +5,75 @@ import static org.mockito.Mockito.*;
 
 import com.streamforge.core.model.DlqEvent;
 import java.lang.reflect.Field;
-import java.util.concurrent.Future;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedConstruction;
 
-@SuppressWarnings("rawtypes")
+@SuppressWarnings({"unchecked"})
 class DLQPublisherTest {
+
+  private KafkaProducer<String, String> mockProducer;
 
   @BeforeEach
   void setUp() throws Exception {
-    System.setProperty("DLQ_TOPIC", "test-dlq-topic");
-    System.setProperty("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092");
+    resetInstance();
 
-    var field = DLQPublisher.class.getDeclaredField("instance");
-    field.setAccessible(true);
-    field.set(null, null);
+    mockProducer = mock(KafkaProducer.class);
+
+    // Create DLQPublisher via mockStatic to avoid real constructor (no real KafkaProducer)
+    DLQPublisher publisher = mock(DLQPublisher.class);
+    doCallRealMethod().when(publisher).publish(any());
+
+    setField(publisher, "producer", mockProducer);
+    setField(publisher, "topic", "test-dlq-topic");
+    setStaticField(publisher);
   }
 
-  @SuppressWarnings("unchecked")
+  @AfterEach
+  void tearDown() throws Exception {
+    resetInstance();
+  }
+
   @Test
-  void publish_shouldSendDlqEventSuccessfully() throws Exception {
-    Field instanceField = DLQPublisher.class.getDeclaredField("instance");
-    instanceField.setAccessible(true);
-    instanceField.set(null, null);
+  void publish_shouldSendDlqEventSuccessfully() {
+    when(mockProducer.send(any(ProducerRecord.class), any())).thenReturn(null);
 
-    Future<RecordMetadata> mockFuture = mock(Future.class);
-    try (MockedConstruction<KafkaProducer> mocked =
-        mockConstruction(
-            KafkaProducer.class,
-            (mockProducer, context) ->
-                when(mockProducer.send(any(ProducerRecord.class), any())).thenReturn(mockFuture))) {
-      DLQPublisher publisher = DLQPublisher.getInstance();
-      DlqEvent event = DlqEvent.of("SINK_ERROR", "something failed", "test-sink", "{}", null);
+    DLQPublisher publisher = DLQPublisher.getInstance();
+    DlqEvent event = DlqEvent.of("SINK_ERROR", "something failed", "test-sink", "{}", null);
 
-      // when
-      publisher.publish(event);
+    publisher.publish(event);
 
-      // then
-      KafkaProducer<String, String> mockProducer = mocked.constructed().get(0);
-      verify(mockProducer, times(1)).send(any(ProducerRecord.class), any());
-      verify(mockFuture, atMostOnce()).get();
-    }
+    verify(mockProducer, times(1)).send(any(ProducerRecord.class), any());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   void publish_shouldHandleExceptionGracefully() {
-    // given
-    try (MockedConstruction<KafkaProducer> ignored =
-        mockConstruction(
-            KafkaProducer.class,
-            (mockProducer, context) ->
-                when(mockProducer.send(any())).thenThrow(new RuntimeException("send failed")))) {
-      DLQPublisher publisher = DLQPublisher.getInstance();
-      DlqEvent event = DlqEvent.of("SINK_ERROR", "broken", "test-sink", "{}", null);
+    when(mockProducer.send(any(ProducerRecord.class), any()))
+        .thenThrow(new RuntimeException("send failed"));
 
-      // when / then
-      publisher.publish(event);
-    }
+    DLQPublisher publisher = DLQPublisher.getInstance();
+    DlqEvent event = DlqEvent.of("SINK_ERROR", "broken", "test-sink", "{}", null);
+
+    publisher.publish(event);
+
+    verify(mockProducer, times(1)).send(any(ProducerRecord.class), any());
+  }
+
+  private static void resetInstance() throws Exception {
+    setStaticField(null);
+  }
+
+  private static void setStaticField(Object value) throws Exception {
+    Field field = DLQPublisher.class.getDeclaredField("instance");
+    field.setAccessible(true);
+    field.set(null, value);
+  }
+
+  private static void setField(Object target, String name, Object value) throws Exception {
+    Field field = DLQPublisher.class.getDeclaredField(name);
+    field.setAccessible(true);
+    field.set(target, value);
   }
 }

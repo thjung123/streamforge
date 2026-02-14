@@ -11,12 +11,12 @@ public class Metrics {
   private final MetricGroup metricGroup;
   private final ConcurrentMap<String, Counter> counters = new ConcurrentHashMap<>();
 
-  public Metrics(RuntimeContext ctx, String jobName, String operatorName) {
-    this(ctx.getMetricGroup(), jobName, operatorName);
+  public Metrics(RuntimeContext ctx, String scope, String operatorName) {
+    this(ctx.getMetricGroup(), scope, operatorName);
   }
 
-  public Metrics(MetricGroup baseGroup, String jobName, String operatorName) {
-    this.metricGroup = baseGroup.addGroup("job", jobName).addGroup("operator", operatorName);
+  public Metrics(MetricGroup baseGroup, String scope, String operatorName) {
+    this.metricGroup = baseGroup.addGroup("scope", scope).addGroup("operator", operatorName);
   }
 
   public void inc(String name) {

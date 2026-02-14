@@ -1,13 +1,13 @@
 # DLQ Replay Guide
 
-This document defines the **DLQ (Dead Letter Queue) replay procedure** used in the Flink CDC pipeline.  
-It explains how failed events stored in DLQ topics are safely validated and reprocessed using a controlled replay workflow.
+This document defines the **DLQ (Dead Letter Queue) replay procedure** for StreamForge pipelines.
+It explains how failed events stored in DLQ topics are safely validated and reprocessed.
 
 ---
 
 ## 1. Purpose & Scope
 
-The **Dead Letter Queue (DLQ)** temporarily stores events that failed during parsing, transformation, or sink operations.  
+The **Dead Letter Queue (DLQ)** temporarily stores events that failed during parsing, transformation, or sink operations.
 It ensures data durability and allows manual reprocessing once the underlying issue has been fixed.
 
 This guide covers:
@@ -20,7 +20,7 @@ This guide covers:
 
 ## 2. DLQ Design & Policy
 
-- Each pipeline maintains its own **Kafka DLQ topic** (e.g., `cdc.<pipeline>.dlq`).
+- Each pipeline maintains its own **Kafka DLQ topic** (e.g., `stream.<pipeline>.dlq`).
 - Events in DLQ are **not reprocessed automatically**.
 - Replay should only occur **after** the cause of failure has been identified and fixed.
 - Retention is typically **7–14 days** to allow safe recovery without backlog growth.
@@ -33,7 +33,7 @@ This guide covers:
 |--------|-------------|--------------|-------------|
 | **Source** | `PARSING_ERROR` | Failed to deserialize or parse input | Fix schema or input format, redeploy, then replay |
 | **Processor** | `PROCESSING_ERROR` | Transformation or enrichment logic failed | Patch and redeploy pipeline, then replay |
-| **Sink** | `SINK_ERROR` | Failed to write to Redis/JDBC/S3 | Fix configuration or connection, then replay |
+| **Sink** | `SINK_ERROR` | Failed to write to target (MongoDB, Kafka, etc.) | Fix configuration or connection, then replay |
 
 ---
 
@@ -51,7 +51,7 @@ Before running a replay, ensure that:
 
 ## 5. Replay Architecture
 
-DLQ replay in production is handled through a **dedicated Airflow DAG** or **on-demand batch job**.  
+DLQ replay in production is handled through a **dedicated Airflow DAG** or **on-demand batch job**.
 This approach ensures safe reprocessing, observability, and operational control.
 
 ### 5.1 Overview
@@ -65,7 +65,6 @@ Replay DAG (Airflow)
 ├── Replay to Source Topic
 └── Monitor & Log Results
 ```
-
 
 ### 5.2 Features
 
@@ -101,6 +100,6 @@ Replay DAG (Airflow)
 
 ## Summary
 
-DLQ replay is a **manual, controlled operation** designed for safe recovery.  
-All replays should be performed after validation and monitoring setup,  
+DLQ replay is a **manual, controlled operation** designed for safe recovery.
+All replays should be performed after validation and monitoring setup,
 preferably through Airflow or batch workflows rather than direct Kafka commands.
