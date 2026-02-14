@@ -1,11 +1,12 @@
-package com.streamforge.job.cdcsync;
+package com.streamforge.job.sync.cdc;
 
 import com.streamforge.connector.kafka.KafkaSinkBuilder;
-import com.streamforge.connector.mongo.CustomMongoCdcSource;
+import com.streamforge.connector.mongo.MongoChangeStreamSource;
+import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.cdcsync.parser.MongoToKafkaParser;
-import com.streamforge.job.cdcsync.processor.MongoToKafkaProcessor;
+import com.streamforge.job.sync.cdc.parser.MongoToKafkaParser;
+import com.streamforge.job.sync.cdc.processor.MongoToKafkaProcessor;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -23,7 +24,7 @@ public class MongoToKafkaJob implements StreamJob {
   public StreamExecutionEnvironment buildPipeline() {
     StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
     env.setParallelism(1);
-    PipelineBuilder.from(new CustomMongoCdcSource().build(env, name()))
+    PipelineBuilder.from(new MongoChangeStreamSource().build(env, name()))
         .parse(new MongoToKafkaParser())
         .process(new MongoToKafkaProcessor())
         .to(new KafkaSinkBuilder(), name());
@@ -33,6 +34,7 @@ public class MongoToKafkaJob implements StreamJob {
 
   @Override
   public void run(String[] args) throws Exception {
+    ScopedConfig.activateJob(name());
     try (StreamExecutionEnvironment env = buildPipeline()) {
       JobExecutionResult result = env.execute(name());
       System.out.println("Job duration: " + result.getNetRuntime());

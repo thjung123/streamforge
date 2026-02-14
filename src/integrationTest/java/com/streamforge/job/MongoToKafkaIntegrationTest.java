@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.mongodb.client.MongoCollection;
 import com.streamforge.core.BaseIntegrationTest;
-import com.streamforge.core.model.CdcEnvelop;
-import com.streamforge.job.cdcsync.MongoToKafkaJob;
+import com.streamforge.core.model.StreamEnvelop;
+import com.streamforge.job.sync.cdc.MongoToKafkaJob;
 import java.time.Duration;
 import java.util.*;
 import java.util.Locale;
@@ -58,7 +58,7 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
     flinkThread.setDaemon(true);
     flinkThread.start();
 
-    System.out.println("[SETUP] Flink CDC job started, waiting for warm-up...");
+    System.out.println("[SETUP] Flink job started, waiting for warm-up...");
     Thread.sleep(8000);
   }
 
@@ -70,7 +70,7 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
     System.out.println("\n=== [STEP] INSERT ===");
     collection.insertOne(new Document("_id", 1).append("name", "Alice"));
     String insertJson = waitForKafkaEvent("\"operation\":\"insert\"", Duration.ofSeconds(20));
-    CdcEnvelop insertEnv = CdcEnvelop.fromJson(insertJson);
+    StreamEnvelop insertEnv = StreamEnvelop.fromJson(insertJson);
     assertThat(insertEnv.getOperation()).isEqualToIgnoringCase("insert");
     assertThat(insertEnv.getPayloadAsMap().get("name"))
         .as("Inserted name must be Alice")
@@ -80,7 +80,7 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
     collection.updateOne(
         new Document("_id", 1), new Document("$set", new Document("name", "Alicia")));
     String updateJson = waitForKafkaEvent("\"operation\":\"update\"", Duration.ofSeconds(20));
-    CdcEnvelop updateEnv = CdcEnvelop.fromJson(updateJson);
+    StreamEnvelop updateEnv = StreamEnvelop.fromJson(updateJson);
     assertThat(updateEnv.getOperation()).isEqualToIgnoringCase("update");
     Map<String, Object> updatePayload = updateEnv.getPayloadAsMap();
 
@@ -90,14 +90,13 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
     if (updatePayload.containsKey("name")) {
       assertThat(updatePayload.get("name")).as("Updated name must be Alicia").isEqualTo("Alicia");
     } else {
-      System.err.println(
-          "[WARN] 'name' field missing in update payload → CDC running in delta mode");
+      System.err.println("[WARN] 'name' field missing in update payload → running in delta mode");
     }
 
     System.out.println("\n=== [STEP] DELETE ===");
     collection.deleteOne(new Document("_id", 1));
     String deleteJson = waitForKafkaEvent("\"operation\":\"delete\"", Duration.ofSeconds(20));
-    CdcEnvelop deleteEnv = CdcEnvelop.fromJson(deleteJson);
+    StreamEnvelop deleteEnv = StreamEnvelop.fromJson(deleteJson);
     assertThat(deleteEnv.getOperation()).isEqualToIgnoringCase("delete");
     assertThat(deleteEnv.getPayloadAsMap().get("_id")).isEqualTo(1);
   }

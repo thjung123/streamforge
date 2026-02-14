@@ -80,16 +80,48 @@ docker run streamforge <job-class>
 
 ## Configuration
 
-Managed via `.env` for local development. Override with environment variables, JVM properties, or Vault/K8s Secrets in production.
+StreamForge uses a **hierarchical configuration** system. Resolution order (highest priority first):
+
+```
+System property → env var → .env → streamforge.json[job] → streamforge.json[common]
+```
+
+### `.env` — Infrastructure commons
+
+Shared settings that rarely change per job. Lives at project root.
 
 ```env
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-CDC_TOPIC=cdc-events
-DLQ_TOPIC=cdc-dlq
-MONGO_URI=mongodb://localhost:27017
-MONGO_DB=mydb
-MONGO_COLLECTION=mycollection
+MONGO_URI=mongodb://localhost:27017/?replicaSet=rs0
+APP_ENV=local
 ```
+
+### `streamforge.json` — Job-specific + common defaults
+
+Job-scoped settings and shared defaults. Each job calls `ScopedConfig.activateJob(name())` at startup.
+
+```json
+{
+  "common": {
+    "KAFKA_BOOTSTRAP_SERVERS": "localhost:9092",
+    "DLQ_TOPIC": "stream-dlq"
+  },
+  "MongoToKafka": {
+    "STREAM_TOPIC": "mongo-events",
+    "MONGO_DB": "source_db",
+    "MONGO_COLLECTION": "orders"
+  },
+  "KafkaToMongo": {
+    "STREAM_TOPIC": "mongo-events",
+    "MONGO_DB": "sink_db",
+    "MONGO_COLLECTION": "orders_mirror"
+  }
+}
+```
+
+### Production
+
+In production, use environment variables, JVM system properties, or Vault/K8s Secrets. These always take priority over `.env` and `streamforge.json`.
 
 ---
 
@@ -97,7 +129,7 @@ MONGO_COLLECTION=mycollection
 
 - **Apache Flink 1.19** — Stream processing engine
 - **Apache Kafka** — Event bus, DLQ
-- **MongoDB** — CDC source/sink
+- **MongoDB** — Source/Sink
 - **Java 17** — Language
 - **Gradle** — Build
 - **Testcontainers** — Integration tests

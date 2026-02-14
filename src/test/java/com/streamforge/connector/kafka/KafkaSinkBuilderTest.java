@@ -4,7 +4,7 @@ import static org.mockito.Mockito.*;
 
 import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.metric.Metrics;
-import com.streamforge.core.model.CdcEnvelop;
+import com.streamforge.core.model.StreamEnvelop;
 import org.junit.jupiter.api.Test;
 
 class KafkaSinkBuilderTest {
@@ -19,7 +19,8 @@ class KafkaSinkBuilderTest {
     metricsField.setAccessible(true);
     metricsField.set(mapFunction, mockMetrics);
 
-    CdcEnvelop envelop = CdcEnvelop.builder().operation("INSERT").payloadJson("{\"id\":1}").build();
+    StreamEnvelop envelop =
+        StreamEnvelop.builder().operation("INSERT").payloadJson("{\"id\":1}").build();
 
     mapFunction.map(envelop);
 
@@ -39,7 +40,8 @@ class KafkaSinkBuilderTest {
 
     doThrow(new RuntimeException("boom")).when(mockMetrics).inc(MetricKeys.SINK_SUCCESS_COUNT);
 
-    CdcEnvelop envelop = CdcEnvelop.builder().operation("INSERT").payloadJson("{\"id\":1}").build();
+    StreamEnvelop envelop =
+        StreamEnvelop.builder().operation("INSERT").payloadJson("{\"id\":1}").build();
 
     try {
       mapFunction.map(envelop);

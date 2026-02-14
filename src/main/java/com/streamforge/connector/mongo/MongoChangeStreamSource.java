@@ -26,15 +26,15 @@ import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class CustomMongoCdcSource implements PipelineBuilder.SourceBuilder<Document> {
+public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Document> {
 
   @Override
   public DataStream<Document> build(StreamExecutionEnvironment env, String jobName) {
     return env.fromSource(
-        new MongoChangeStreamSource(), WatermarkStrategy.noWatermarks(), jobName + "-MongoCDC");
+        new MongoChangeStreamFlink(), WatermarkStrategy.noWatermarks(), jobName + "-MongoSource");
   }
 
-  public static class MongoChangeStreamSource implements Source<Document, NoSplit, Void> {
+  public static class MongoChangeStreamFlink implements Source<Document, NoSplit, Void> {
 
     @Override
     public Boundedness getBoundedness() {
@@ -107,10 +107,10 @@ public class CustomMongoCdcSource implements PipelineBuilder.SourceBuilder<Docum
 
         MongoCollection<Document> collection = client.getDatabase(dbName).getCollection(collName);
         cursor = collection.watch().cursor();
-        log.info("[MongoCDC] Connected to {}.{} via {}", db, coll, uri);
+        log.info("[MongoSource] Connected to {}.{} via {}", db, coll, uri);
       } catch (Exception e) {
-        log.error("[MongoCDC] Failed to start ChangeStream reader", e);
-        throw new RuntimeException("Failed to start Mongo CDC source", e);
+        log.error("[MongoSource] Failed to start ChangeStream reader", e);
+        throw new RuntimeException("Failed to start Mongo ChangeStream source", e);
       }
     }
 
@@ -154,13 +154,13 @@ public class CustomMongoCdcSource implements PipelineBuilder.SourceBuilder<Docum
         output.collect(event);
         return InputStatus.MORE_AVAILABLE;
       } catch (MongoException ex) {
-        log.warn("[MongoCDC] Lost connection to MongoDB, retrying in 3s...", ex);
+        log.warn("[MongoSource] Lost connection to MongoDB, retrying in 3s...", ex);
         safeCloseCursor();
         Thread.sleep(3000);
         reconnect();
         return InputStatus.NOTHING_AVAILABLE;
       } catch (Exception e) {
-        log.error("[MongoCDC] Error reading change stream event", e);
+        log.error("[MongoSource] Error reading change stream event", e);
         DlqEvent dlqEvent =
             DlqEvent.of("SOURCE_PARSING_ERROR", e.getMessage(), "MongoChangeStreamSource", null, e);
         DLQPublisher.getInstance().publish(dlqEvent);
@@ -190,9 +190,9 @@ public class CustomMongoCdcSource implements PipelineBuilder.SourceBuilder<Docum
       try {
         if (cursor != null) cursor.close();
         if (client != null) client.close();
-        log.info("[MongoCDC] ChangeStream closed gracefully");
+        log.info("[MongoSource] ChangeStream closed gracefully");
       } catch (Exception e) {
-        log.warn("[MongoCDC] Error while closing resources", e);
+        log.warn("[MongoSource] Error while closing resources", e);
       }
     }
 
@@ -202,7 +202,7 @@ public class CustomMongoCdcSource implements PipelineBuilder.SourceBuilder<Docum
       String collName = getOrDefault(MONGO_COLLECTION, MONGO_COLLECTION);
       client = MongoClients.create(uri);
       cursor = client.getDatabase(dbName).getCollection(collName).watch().cursor();
-      log.info("[MongoCDC] Reconnected to MongoDB: {}.{}", dbName, collName);
+      log.info("[MongoSource] Reconnected to MongoDB: {}.{}", dbName, collName);
     }
 
     private void safeCloseCursor() {

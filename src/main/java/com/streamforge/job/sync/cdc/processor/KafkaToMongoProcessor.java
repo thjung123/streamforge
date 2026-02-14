@@ -1,13 +1,13 @@
-package com.streamforge.job.cdcsync.processor;
+package com.streamforge.job.sync.cdc.processor;
 
 import com.streamforge.core.config.ErrorCodes;
 import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
-import com.streamforge.core.model.CdcEnvelop;
 import com.streamforge.core.model.DlqEvent;
+import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.cdcsync.KafkaToMongoJob;
+import com.streamforge.job.sync.cdc.KafkaToMongoJob;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -18,15 +18,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class KafkaToMongoProcessor
-    implements PipelineBuilder.ProcessorFunction<CdcEnvelop, CdcEnvelop> {
+    implements PipelineBuilder.ProcessorFunction<StreamEnvelop, StreamEnvelop> {
 
   private static final Logger log = LoggerFactory.getLogger(KafkaToMongoProcessor.class);
 
   @Override
-  public DataStream<CdcEnvelop> process(DataStream<CdcEnvelop> input) {
+  public DataStream<StreamEnvelop> process(DataStream<StreamEnvelop> input) {
     return input
         .map(
-            new RichMapFunction<CdcEnvelop, CdcEnvelop>() {
+            new RichMapFunction<StreamEnvelop, StreamEnvelop>() {
 
               private transient Metrics metrics;
 
@@ -42,14 +42,14 @@ public class KafkaToMongoProcessor
               }
 
               @Override
-              public CdcEnvelop map(CdcEnvelop envelop) {
+              public StreamEnvelop map(StreamEnvelop envelop) {
                 try {
-                  CdcEnvelop result = enrich(envelop);
+                  StreamEnvelop result = enrich(envelop);
                   metrics.inc(MetricKeys.PROCESSOR_SUCCESS_COUNT);
                   return result;
                 } catch (Exception e) {
                   metrics.inc(MetricKeys.PROCESSOR_ERROR_COUNT);
-                  log.error("Failed to process CdcEnvelop: {}", envelop, e);
+                  log.error("Failed to process StreamEnvelop: {}", envelop, e);
 
                   DlqEvent dlqEvent =
                       DlqEvent.of(
@@ -67,7 +67,7 @@ public class KafkaToMongoProcessor
         .name(KafkaToMongoJob.PROCESSOR_NAME);
   }
 
-  private static CdcEnvelop enrich(CdcEnvelop envelop) {
+  private static StreamEnvelop enrich(StreamEnvelop envelop) {
     if (envelop == null) {
       throw new IllegalArgumentException("Envelop cannot be null during processing");
     }

@@ -8,14 +8,14 @@ import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-class CdcEnvelopTest {
+class StreamEnvelopTest {
 
   @Test
-  @DisplayName("of() should create a CdcEnvelop with current timestamps and provided values")
+  @DisplayName("of() should create a StreamEnvelop with current timestamps and provided values")
   void testOfFactoryMethod() {
     Map<String, Object> payload = Map.of("id", 1, "name", "Alice");
 
-    CdcEnvelop envelop = CdcEnvelop.of("CREATE", "users", payload);
+    StreamEnvelop envelop = StreamEnvelop.of("CREATE", "users", payload);
 
     assertEquals("CREATE", envelop.getOperation());
     assertEquals("users", envelop.getSource());
@@ -33,8 +33,8 @@ class CdcEnvelopTest {
   @Test
   @DisplayName("toJson() and fromJson() should correctly serialize and deserialize the object")
   void testJsonSerialization() {
-    CdcEnvelop original =
-        CdcEnvelop.builder()
+    StreamEnvelop original =
+        StreamEnvelop.builder()
             .operation("UPDATE")
             .source("orders")
             .payloadJson(JsonUtils.toJson(Map.of("orderId", 1234, "status", "SHIPPED")))
@@ -51,7 +51,7 @@ class CdcEnvelopTest {
     assertTrue(json.contains("trace-abc-123"));
     assertTrue(json.contains("orderId"));
 
-    CdcEnvelop restored = CdcEnvelop.fromJson(json);
+    StreamEnvelop restored = StreamEnvelop.fromJson(json);
     assertEquals(original.getOperation(), restored.getOperation());
     assertEquals(original.getSource(), restored.getSource());
     assertEquals(original.getPayloadAsMap(), restored.getPayloadAsMap());
@@ -64,8 +64,8 @@ class CdcEnvelopTest {
   void testEqualsAndHashCode() {
     String payloadJson = JsonUtils.toJson(Map.of("sku", "ABC123"));
 
-    CdcEnvelop e1 =
-        CdcEnvelop.builder()
+    StreamEnvelop e1 =
+        StreamEnvelop.builder()
             .operation("DELETE")
             .source("inventory")
             .payloadJson(payloadJson)
@@ -75,8 +75,8 @@ class CdcEnvelopTest {
             .traceId("trace-1")
             .build();
 
-    CdcEnvelop e2 =
-        CdcEnvelop.builder()
+    StreamEnvelop e2 =
+        StreamEnvelop.builder()
             .operation("DELETE")
             .source("inventory")
             .payloadJson(payloadJson)

@@ -1,4 +1,4 @@
-package com.streamforge.job.cdcsync.parser;
+package com.streamforge.job.sync.cdc.parser;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,10 +8,10 @@ import com.streamforge.core.config.ErrorCodes;
 import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
-import com.streamforge.core.model.CdcEnvelop;
 import com.streamforge.core.model.DlqEvent;
+import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.cdcsync.KafkaToMongoJob;
+import com.streamforge.job.sync.cdc.KafkaToMongoJob;
 import java.time.Instant;
 import java.util.Objects;
 import org.apache.flink.api.common.functions.RichMapFunction;
@@ -20,7 +20,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class KafkaToMongoParser implements PipelineBuilder.ParserFunction<String, CdcEnvelop> {
+public class KafkaToMongoParser implements PipelineBuilder.ParserFunction<String, StreamEnvelop> {
 
   private static final Logger log = LoggerFactory.getLogger(KafkaToMongoParser.class);
   private static final ObjectMapper MAPPER =
@@ -30,11 +30,11 @@ public class KafkaToMongoParser implements PipelineBuilder.ParserFunction<String
           .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
   @Override
-  public DataStream<CdcEnvelop> parse(DataStream<String> input) {
+  public DataStream<StreamEnvelop> parse(DataStream<String> input) {
     return input
         .filter(json -> json != null && json.trim().startsWith("{") && json.trim().endsWith("}"))
         .map(
-            new RichMapFunction<String, CdcEnvelop>() {
+            new RichMapFunction<String, StreamEnvelop>() {
               private transient Metrics metrics;
 
               @Override
@@ -47,9 +47,9 @@ public class KafkaToMongoParser implements PipelineBuilder.ParserFunction<String
               }
 
               @Override
-              public CdcEnvelop map(String json) {
+              public StreamEnvelop map(String json) {
                 try {
-                  CdcEnvelop env = parseJson(json);
+                  StreamEnvelop env = parseJson(json);
                   metrics.inc(MetricKeys.PARSER_SUCCESS_COUNT);
                   return env;
                 } catch (Exception e) {
@@ -71,10 +71,10 @@ public class KafkaToMongoParser implements PipelineBuilder.ParserFunction<String
         .name(KafkaToMongoJob.PARSER_NAME);
   }
 
-  static CdcEnvelop parseJson(String json) throws Exception {
-    CdcEnvelop envelop = MAPPER.readValue(json, CdcEnvelop.class);
+  static StreamEnvelop parseJson(String json) throws Exception {
+    StreamEnvelop envelop = MAPPER.readValue(json, StreamEnvelop.class);
 
-    return CdcEnvelop.builder()
+    return StreamEnvelop.builder()
         .operation(envelop.getOperation())
         .source(envelop.getSource())
         .payloadJson(envelop.getPayloadJson())

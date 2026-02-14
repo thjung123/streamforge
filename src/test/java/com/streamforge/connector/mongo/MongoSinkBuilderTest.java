@@ -8,7 +8,7 @@ import com.mongodb.client.model.ReplaceOptions;
 import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
-import com.streamforge.core.model.CdcEnvelop;
+import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.util.JsonUtils;
 import java.lang.reflect.Field;
 import java.util.Map;
@@ -42,8 +42,12 @@ class MongoSinkBuilderTest {
     metricsField.set(writer, mockMetrics);
 
     String payloadJson = JsonUtils.toJson(Map.of("id", 1, "name", "Charlie"));
-    CdcEnvelop envelop =
-        CdcEnvelop.builder().operation("INSERT").primaryKey("id").payloadJson(payloadJson).build();
+    StreamEnvelop envelop =
+        StreamEnvelop.builder()
+            .operation("INSERT")
+            .primaryKey("id")
+            .payloadJson(payloadJson)
+            .build();
 
     // when
     writer.write(envelop, null);
@@ -73,8 +77,12 @@ class MongoSinkBuilderTest {
         .replaceOne(any(Bson.class), any(Document.class), any(ReplaceOptions.class));
 
     String payloadJson = JsonUtils.toJson(Map.of("id", 2, "name", "Alice"));
-    CdcEnvelop envelop =
-        CdcEnvelop.builder().operation("INSERT").primaryKey("id").payloadJson(payloadJson).build();
+    StreamEnvelop envelop =
+        StreamEnvelop.builder()
+            .operation("INSERT")
+            .primaryKey("id")
+            .payloadJson(payloadJson)
+            .build();
 
     // when
     writer.write(envelop, null);
