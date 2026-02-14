@@ -1,54 +1,52 @@
 package com.streamforge.connector.kafka;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.streamforge.core.config.MetricKeys;
+import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.model.StreamEnvelop;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class KafkaSinkBuilderTest {
 
-  @Test
-  void testMapIncrementsSuccessMetric() throws Exception {
-    KafkaSinkBuilder.MetricsMapFunction mapFunction =
-        new KafkaSinkBuilder.MetricsMapFunction("test-job");
+  private Metrics metrics;
+  private DLQPublisher dlqPublisher;
+  private KafkaSinkBuilder.MetricsMapFunction mapFunction;
 
-    Metrics mockMetrics = mock(Metrics.class);
-    var metricsField = mapFunction.getClass().getDeclaredField("metrics");
-    metricsField.setAccessible(true);
-    metricsField.set(mapFunction, mockMetrics);
-
-    StreamEnvelop envelop =
-        StreamEnvelop.builder().operation("INSERT").payloadJson("{\"id\":1}").build();
-
-    mapFunction.map(envelop);
-
-    verify(mockMetrics, times(1)).inc(MetricKeys.SINK_SUCCESS_COUNT);
-    verify(mockMetrics, never()).inc(MetricKeys.SINK_ERROR_COUNT);
+  @BeforeEach
+  void setUp() {
+    metrics = mock(Metrics.class);
+    dlqPublisher = mock(DLQPublisher.class);
+    mapFunction = new KafkaSinkBuilder.MetricsMapFunction("test-job", metrics, dlqPublisher);
   }
 
   @Test
-  void testMapIncrementsErrorMetricOnFailure() throws Exception {
-    KafkaSinkBuilder.MetricsMapFunction mapFunction =
-        new KafkaSinkBuilder.MetricsMapFunction("test-job");
+  void testMapIncrementsSuccessMetric() {
+    StreamEnvelop envelop =
+        StreamEnvelop.builder().operation("INSERT").payloadJson("{\"id\":1}").build();
 
-    Metrics mockMetrics = mock(Metrics.class);
-    var metricsField = mapFunction.getClass().getDeclaredField("metrics");
-    metricsField.setAccessible(true);
-    metricsField.set(mapFunction, mockMetrics);
+    StreamEnvelop result = mapFunction.map(envelop);
 
-    doThrow(new RuntimeException("boom")).when(mockMetrics).inc(MetricKeys.SINK_SUCCESS_COUNT);
+    assertSame(envelop, result);
+    verify(metrics).inc(MetricKeys.SINK_SUCCESS_COUNT);
+    verify(metrics, never()).inc(MetricKeys.SINK_ERROR_COUNT);
+    verifyNoInteractions(dlqPublisher);
+  }
+
+  @Test
+  void testMapIncrementsErrorMetricOnFailure() {
+    doThrow(new RuntimeException("boom")).when(metrics).inc(MetricKeys.SINK_SUCCESS_COUNT);
 
     StreamEnvelop envelop =
         StreamEnvelop.builder().operation("INSERT").payloadJson("{\"id\":1}").build();
 
-    try {
-      mapFunction.map(envelop);
-    } catch (RuntimeException ignored) {
-    }
+    assertThrows(RuntimeException.class, () -> mapFunction.map(envelop));
 
-    verify(mockMetrics, times(1)).inc(MetricKeys.SINK_SUCCESS_COUNT);
-    verify(mockMetrics, times(1)).inc(MetricKeys.SINK_ERROR_COUNT);
+    verify(metrics).inc(MetricKeys.SINK_SUCCESS_COUNT);
+    verify(metrics).inc(MetricKeys.SINK_ERROR_COUNT);
+    verify(dlqPublisher).publish(any());
   }
 }

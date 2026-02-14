@@ -62,16 +62,24 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<StreamEnvel
   static class MetricsMapFunction extends RichMapFunction<StreamEnvelop, StreamEnvelop> {
 
     private transient Metrics metrics;
+    private transient DLQPublisher dlqPublisher;
     private final String jobName;
 
     public MetricsMapFunction(String jobName) {
       this.jobName = jobName;
     }
 
+    MetricsMapFunction(String jobName, Metrics metrics, DLQPublisher dlqPublisher) {
+      this.jobName = jobName;
+      this.metrics = metrics;
+      this.dlqPublisher = dlqPublisher;
+    }
+
     @Override
     public void open(Configuration parameters) {
       this.metrics = new Metrics(getRuntimeContext(), jobName, KAFKA);
-      DLQPublisher.getInstance().initMetrics(getRuntimeContext(), jobName);
+      this.dlqPublisher = DLQPublisher.getInstance();
+      dlqPublisher.initMetrics(getRuntimeContext(), jobName);
     }
 
     @Override
@@ -89,7 +97,7 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<StreamEnvel
                 OPERATOR_NAME,
                 envelop != null ? envelop.toJson() : null,
                 e);
-        DLQPublisher.getInstance().publish(dlqEvent);
+        dlqPublisher.publish(dlqEvent);
         throw e;
       }
     }

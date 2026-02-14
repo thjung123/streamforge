@@ -1,6 +1,6 @@
 # Checkpoint & Savepoint Strategy
 
-This document defines how our **Flink CDC pipeline** uses checkpoints and savepoints for **state management**, **fault tolerance**, and **recovery** in production.
+This document defines how StreamForge pipelines use checkpoints and savepoints for **state management**, **fault tolerance**, and **recovery** in production.
 
 ---
 
@@ -13,33 +13,46 @@ Flink provides two main mechanisms for state persistence and recovery:
 | Checkpoint | Periodic snapshots for automatic fault-tolerant recovery | Automatic |
 | Savepoint  | Manual snapshot for controlled restarts or upgrades      | Manual    |
 
-- **Checkpoints** are continuous and used for automatic recovery after failures.
-- **Savepoints** are manually triggered, typically for upgrades, schema migrations, or controlled restarts.
+- **Checkpoints** run continuously during normal operation. On failure, Flink automatically restores from the latest checkpoint.
+- **Savepoints** are manually triggered for planned events: upgrades, schema migrations, or controlled restarts.
 
 ---
 
-## 2. Checkpoint Strategy (via Flink Operator YAML)
+## 2. What Gets Checkpointed
 
-Instead of configuring checkpoints in Java, we define them directly in the **FlinkDeployment YAML** to ensure consistency across environments.
+StreamForge pipelines persist the following state in checkpoints and savepoints:
 
-Example (`FlinkDeployment`):
+| State Type | Example | Stored In |
+|-----------|---------|-----------|
+| **Source offsets** | Kafka consumer offsets, MongoDB resume tokens | Flink source state |
+| **Operator state** | Deduplicator seen-keys, StatefulMerger previous values | `ValueState` / `MapState` |
+| **Sink state** | Kafka transactional IDs (exactly-once) | Flink sink state |
+| **Pattern state** | SessionAnalyzer active sessions, Materializer latest values | `ValueState` / `ListState` |
+
+On recovery, all state is restored atomically — sources resume from their last committed offset/token, and operators continue from their last known state.
+
+---
+
+## 3. Checkpoint Configuration (via Flink Operator YAML)
+
+Instead of configuring checkpoints in Java, define them in the **FlinkDeployment YAML** for consistency across environments.
 
 ```yaml
 spec:
   job:
     upgradeMode: "savepoint"
   flinkConfiguration:
-    state.savepoints.dir: s3://flink-checkpoints/savepoints
-    state.checkpoints.dir: s3://flink-checkpoints/checkpoints
+    state.savepoints.dir: s3://streamforge-state/savepoints
+    state.checkpoints.dir: s3://streamforge-state/checkpoints
     execution.checkpointing.interval: 60s
     execution.checkpointing.timeout: 120s
     execution.checkpointing.min-pause: 30s
     execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
 ```
 
-**Practical Guidelines**
+**Guidelines**
 
-- Interval: 30–60s — frequent enough to minimize data reprocessing.
+- Interval: 30–60s — frequent enough to minimize data reprocessing on failure.
 - Timeout: 60–120s — longer if sink latency is high.
 - Min Pause: ~30s — prevents checkpoint backpressure.
 - Externalized Checkpoints: Always enabled (RETAIN_ON_CANCELLATION) for safe rollback.
@@ -47,55 +60,53 @@ spec:
 
 ---
 
-## 3. Savepoint Usage
+## 4. Savepoint Usage
 
-Use savepoints when you need controlled restart scenarios such as:
+Use savepoints for controlled restart scenarios:
 
-- Version upgrades — before deploying a new JAR.
-- Schema migrations — state must align with new schema.
-- Disaster recovery drills — controlled rollback points.
+- **Version upgrades** — before deploying a new JAR.
+- **Schema migrations** — state must align with new schema.
+- **Pipeline reconfiguration** — changing parallelism, adding/removing patterns.
+- **Disaster recovery drills** — controlled rollback points.
 
----
+### Savepoint with Source Offsets
 
-## 4. Recovery Scenarios
+When a savepoint is taken, source offsets (Kafka offsets, MongoDB resume tokens) are included. On restore:
 
-| Scenario               | Recommended Action                                           |
-| ---------------------- | ------------------------------------------------------------ |
-| **Node failure**       | Job automatically recovers from the latest **checkpoint**.   |
-| **Redeploy / Upgrade** | Trigger a **savepoint** before deployment and restore state from it. |
-| **Data corruption**    | Restore from a **savepoint** or **checkpoint**, then **replay from DLQ** if needed. |
-| **Schema change**      | Stop the job → Create **savepoint** → Deploy new version → Restore from savepoint. |
+1. Kafka sources resume from the saved consumer offset.
+2. MongoDB Change Stream sources reopen the cursor from the saved resume token.
+3. No events are skipped or duplicated (assuming idempotent sinks or exactly-once mode).
 
 ---
 
-## 5. Processing Guarantees
+## 5. Recovery Scenarios
 
-With this setup:
-
-- At-least-once delivery is guaranteed by default.
-- To achieve exactly-once, sinks must support idempotent writes or transactional commits.
+| Scenario | Recovery Method | Details |
+|----------|----------------|---------|
+| **Node failure** | Latest **checkpoint** (automatic) | Flink restores all operator state and source offsets. |
+| **Redeploy / Upgrade** | **Savepoint** (manual) | Trigger savepoint → deploy new version → restore from savepoint. |
+| **Data corruption** | **Savepoint** or **checkpoint** | Restore from a known-good snapshot. Replay from DLQ if needed. |
+| **Schema change** | **Savepoint** (manual) | Stop job → create savepoint → deploy with new schema → restore. |
+| **Parallelism change** | **Savepoint** (manual) | Savepoint redistributes keyed state across new parallelism. |
 
 ---
 
-## 6. Operational Recommendations
+## 6. Processing Guarantees
 
-- Monitor checkpoint duration and alignment time in Grafana to detect bottlenecks.
-- Periodically clean up old savepoints to manage storage costs.
-- Automate savepoint creation in CI/CD before deploying new versions.
+| Guarantee | Requirement |
+|-----------|-------------|
+| At-least-once | Default with checkpointing enabled. |
+| Exactly-once | Sinks must support idempotent writes or transactional commits (see TransactionalWriter pattern). |
+
+With at-least-once, duplicate events may occur after checkpoint recovery. Use the **Deduplicator** pattern to handle this at the stream level.
 
 ---
 
 ## 7. Operator-Driven Savepoint Management
 
-In Kubernetes-based deployments, the **Flink Operator** ensures safe and consistent state transitions during job lifecycle events such as upgrades, restarts, or controlled shutdowns.
-
-This section defines how savepoints are managed and recovered in production environments.
-
----
+In Kubernetes-based deployments, the **Flink Operator** automates savepoint lifecycle during job events.
 
 ### 7.1 Automatic Savepoint on Job Cancel
-
-When `kubernetes.operator.job.cancel.mode: savepoint` is enabled, the Operator ensures that every controlled stop (e.g., redeploy, upgrade, rollback) produces a consistent **savepoint** before terminating the job.
 
 ```yaml
 spec:
@@ -106,7 +117,7 @@ spec:
 
 **Behavior**:
 
-- **On Cancel or Upgrade**: A savepoint is triggered automatically and stored under state.savepoints.dir (e.g., s3://flink-checkpoints/savepoints).
+- **On Cancel or Upgrade**: A savepoint is triggered automatically and stored under `state.savepoints.dir`.
 - **On Restart**: The Operator restores from the latest valid savepoint.
 - **Retention**: Savepoints are retained unless cleaned by lifecycle rules or manual action.
 
@@ -114,8 +125,16 @@ spec:
 
 | Step | Action | Description |
 |------|---------|-------------|
-| **1. Deploy** | Apply or sync `FlinkDeployment` | Operator starts the job with checkpointing and savepoint configuration. |
-| **2. Upgrade** | Modify job spec or image | Operator automatically takes a savepoint, cancels the current job, and restores the new job from that savepoint. |
-| **3. Failure Recovery** | Handled automatically | Operator recovers from the latest checkpoint; if unavailable, it restores from the most recent savepoint. |
-| **4. Retention Policy** | Periodic cleanup | S3 lifecycle rules automatically expire old savepoints; critical ones can be tagged and retained longer. |
-````
+| **1. Deploy** | Apply `FlinkDeployment` | Operator starts the job with checkpointing and savepoint configuration. |
+| **2. Upgrade** | Modify job spec or image | Operator takes savepoint → cancels job → restores new job from savepoint. |
+| **3. Failure Recovery** | Automatic | Operator recovers from latest checkpoint; if unavailable, falls back to most recent savepoint. |
+| **4. Retention** | Periodic cleanup | S3 lifecycle rules expire old savepoints; critical ones can be tagged and retained. |
+
+---
+
+## 8. Operational Recommendations
+
+- Monitor checkpoint duration and alignment time to detect state size or backpressure issues.
+- Periodically clean up old savepoints to manage storage costs.
+- Automate savepoint creation in CI/CD before deploying new versions.
+- Test savepoint restore in staging before production upgrades.

@@ -80,7 +80,7 @@ public final class ScopedConfig {
     Map<String, String> commonSection = jsonConfig.get(COMMON_KEY);
     if (commonSection != null) {
       value = commonSection.get(key);
-      if (value != null) return value;
+      return value;
     }
 
     return null;
