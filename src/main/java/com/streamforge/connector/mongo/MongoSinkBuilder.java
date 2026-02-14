@@ -13,8 +13,8 @@ import com.mongodb.client.model.ReplaceOptions;
 import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
-import com.streamforge.core.model.CdcEnvelop;
 import com.streamforge.core.model.DlqEvent;
+import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.SinkWriter;
@@ -24,16 +24,16 @@ import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class MongoSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop> {
+public class MongoSinkBuilder implements PipelineBuilder.SinkBuilder<StreamEnvelop> {
 
   public static final String OPERATOR_NAME = "MongoSink";
 
   @Override
-  public DataStreamSink<CdcEnvelop> write(DataStream<CdcEnvelop> stream, String jobName) {
+  public DataStreamSink<StreamEnvelop> write(DataStream<StreamEnvelop> stream, String jobName) {
     return stream.sinkTo(new MongoSink(jobName)).name(OPERATOR_NAME);
   }
 
-  static class MongoSink implements Sink<CdcEnvelop> {
+  static class MongoSink implements Sink<StreamEnvelop> {
     private final String jobName;
 
     public MongoSink(String jobName) {
@@ -42,12 +42,12 @@ public class MongoSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop>
 
     @SuppressWarnings("deprecation")
     @Override
-    public SinkWriter<CdcEnvelop> createWriter(InitContext context) {
+    public SinkWriter<StreamEnvelop> createWriter(InitContext context) {
       return new MongoSinkWriter(jobName, context);
     }
   }
 
-  static class MongoSinkWriter implements SinkWriter<CdcEnvelop> {
+  static class MongoSinkWriter implements SinkWriter<StreamEnvelop> {
 
     private static final Logger log = LoggerFactory.getLogger(MongoSinkWriter.class);
 
@@ -76,7 +76,7 @@ public class MongoSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop>
     }
 
     @Override
-    public void write(CdcEnvelop value, Context context) {
+    public void write(StreamEnvelop value, Context context) {
       try {
         String op = value.getOperation();
         Object pkValue =

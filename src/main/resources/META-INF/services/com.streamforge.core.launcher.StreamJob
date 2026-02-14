@@ -1,2 +1,2 @@
-com.streamforge.job.cdcsync.MongoToKafkaJob
-com.streamforge.job.cdcsync.KafkaToMongoJob
+com.streamforge.job.sync.cdc.MongoToKafkaJob
+com.streamforge.job.sync.cdc.KafkaToMongoJob

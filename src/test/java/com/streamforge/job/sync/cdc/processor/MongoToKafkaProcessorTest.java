@@ -1,8 +1,8 @@
-package com.streamforge.job.cdcsync.processor;
+package com.streamforge.job.sync.cdc.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.streamforge.core.model.CdcEnvelop;
+import com.streamforge.core.model.StreamEnvelop;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,12 +16,12 @@ class MongoToKafkaProcessorTest {
     Map<String, Object> payload = new HashMap<>();
     payload.put("id", 42);
 
-    CdcEnvelop envelop = CdcEnvelop.of("update", "orders", payload);
+    StreamEnvelop envelop = StreamEnvelop.of("update", "orders", payload);
     envelop.setTraceId(null);
     envelop.setProcessedTime(null);
 
     // when
-    CdcEnvelop result = invokeEnrich(envelop);
+    StreamEnvelop result = invokeEnrich(envelop);
 
     // then
     assertThat(result.getProcessedTime()).isNotNull();
@@ -35,12 +35,12 @@ class MongoToKafkaProcessorTest {
     Map<String, Object> payload = new HashMap<>();
     payload.put("id", 42);
 
-    CdcEnvelop envelop = CdcEnvelop.of("update", "orders", payload);
+    StreamEnvelop envelop = StreamEnvelop.of("update", "orders", payload);
     envelop.setTraceId("trace-12345");
     envelop.setProcessedTime(null);
 
     // when
-    CdcEnvelop result = invokeEnrich(envelop);
+    StreamEnvelop result = invokeEnrich(envelop);
 
     // then
     assertThat(result.getTraceId()).isEqualTo("trace-12345");
@@ -50,17 +50,17 @@ class MongoToKafkaProcessorTest {
   @Test
   void enrich_shouldReturnNull_whenInputIsNull() {
     // when
-    CdcEnvelop result = invokeEnrich(null);
+    StreamEnvelop result = invokeEnrich(null);
 
     // then
     assertThat(result).isNull();
   }
 
-  private CdcEnvelop invokeEnrich(CdcEnvelop envelop) {
+  private StreamEnvelop invokeEnrich(StreamEnvelop envelop) {
     try {
-      var method = MongoToKafkaProcessor.class.getDeclaredMethod("enrich", CdcEnvelop.class);
+      var method = MongoToKafkaProcessor.class.getDeclaredMethod("enrich", StreamEnvelop.class);
       method.setAccessible(true);
-      return (CdcEnvelop) method.invoke(null, envelop);
+      return (StreamEnvelop) method.invoke(null, envelop);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }

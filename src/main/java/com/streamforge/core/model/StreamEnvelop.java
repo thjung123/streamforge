@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CdcEnvelop implements Serializable {
+public class StreamEnvelop implements Serializable {
 
   @Serial private static final long serialVersionUID = 1L;
 
@@ -26,13 +26,13 @@ public class CdcEnvelop implements Serializable {
   private String traceId;
   private String primaryKey;
 
-  public static CdcEnvelop of(
+  public static StreamEnvelop of(
       String operation, String source, Map<String, Object> payload, String primaryKey) {
     if (operation == null || source == null) {
       throw new IllegalArgumentException("operation and source must not be null");
     }
 
-    return CdcEnvelop.builder()
+    return StreamEnvelop.builder()
         .operation(operation)
         .source(source)
         .payloadJson(payload != null ? JsonUtils.toJson(payload) : null)
@@ -43,12 +43,12 @@ public class CdcEnvelop implements Serializable {
         .build();
   }
 
-  public static CdcEnvelop of(String operation, String source, Map<String, Object> payload) {
+  public static StreamEnvelop of(String operation, String source, Map<String, Object> payload) {
     return of(operation, source, payload, null);
   }
 
-  public static CdcEnvelop fromJson(String json) {
-    return JsonUtils.fromJson(json, CdcEnvelop.class);
+  public static StreamEnvelop fromJson(String json) {
+    return JsonUtils.fromJson(json, StreamEnvelop.class);
   }
 
   public String toJson() {

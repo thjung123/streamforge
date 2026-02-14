@@ -38,9 +38,9 @@ public abstract class BaseIntegrationTest {
 
   protected static MongoClient mongoClient;
 
-  protected static final String KAFKA_TOPIC_MAIN = "cdc-topic";
-  protected static final String KAFKA_TOPIC_DLQ = "cdc-dlq";
-  protected static final String MONGO_DB_NAME = "cdc_test";
+  protected static final String KAFKA_TOPIC_MAIN = "stream-topic";
+  protected static final String KAFKA_TOPIC_DLQ = "stream-dlq";
+  protected static final String MONGO_DB_NAME = "streamforge_test";
   protected static final String MONGO_COLLECTION = "events";
 
   @BeforeAll
@@ -79,8 +79,8 @@ public abstract class BaseIntegrationTest {
     System.setProperty("MONGO_DB", MONGO_DB_NAME);
     System.setProperty("MONGO_COLLECTION", MONGO_COLLECTION);
     System.setProperty("KAFKA_BOOTSTRAP_SERVERS", kafka.getBootstrapServers());
-    System.setProperty("CDC_TOPIC", KAFKA_TOPIC_MAIN);
-    System.setProperty("CDC_DLQ_TOPIC", KAFKA_TOPIC_DLQ);
+    System.setProperty("STREAM_TOPIC", KAFKA_TOPIC_MAIN);
+    System.setProperty("DLQ_TOPIC", KAFKA_TOPIC_DLQ);
 
     System.out.println("[INIT] Test environment ready");
   }

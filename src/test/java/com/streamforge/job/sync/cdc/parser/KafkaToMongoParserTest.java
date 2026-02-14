@@ -1,4 +1,4 @@
-package com.streamforge.job.cdcsync.parser;
+package com.streamforge.job.sync.cdc.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
@@ -6,16 +6,16 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.streamforge.core.model.CdcEnvelop;
+import com.streamforge.core.model.StreamEnvelop;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class KafkaToMongoParserTest {
 
   @Test
-  void testParse_validJson_shouldReturnCdcEnvelop() throws Exception {
+  void testParse_validJson_shouldReturnStreamEnvelop() throws Exception {
     // given
-    CdcEnvelop envelop = CdcEnvelop.of("insert", "orders", Map.of("id", 123));
+    StreamEnvelop envelop = StreamEnvelop.of("insert", "orders", Map.of("id", 123));
     String json =
         new ObjectMapper()
             .registerModule(new JavaTimeModule())
@@ -23,7 +23,7 @@ class KafkaToMongoParserTest {
             .writeValueAsString(envelop);
 
     // when
-    CdcEnvelop result = KafkaToMongoParser.parseJson(json);
+    StreamEnvelop result = KafkaToMongoParser.parseJson(json);
 
     // then
     assertThat(result).isNotNull();

@@ -1,8 +1,8 @@
-package com.streamforge.job.cdcsync.parser;
+package com.streamforge.job.sync.cdc.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.streamforge.core.model.CdcEnvelop;
+import com.streamforge.core.model.StreamEnvelop;
 import java.util.HashMap;
 import java.util.Map;
 import org.bson.Document;
@@ -17,7 +17,7 @@ class MongoToKafkaParserTest {
             .append("source", "users")
             .append("fullDocument", Map.of("_id", 1, "name", "Alice"));
 
-    CdcEnvelop result = MongoToKafkaParser.from(doc);
+    StreamEnvelop result = MongoToKafkaParser.from(doc);
 
     assertThat(result.getOperation()).isEqualTo("insert");
     assertThat(result.getPayloadAsMap()).containsEntry("_id", 1);
@@ -34,7 +34,7 @@ class MongoToKafkaParserTest {
                 new Document("updatedFields", new HashMap<>(Map.of("age", 30))))
             .append("documentKey", new Document("_id", 5));
 
-    CdcEnvelop result = MongoToKafkaParser.from(doc);
+    StreamEnvelop result = MongoToKafkaParser.from(doc);
 
     assertThat(result.getOperation()).isEqualTo("update");
     assertThat(result.getPayloadAsMap()).containsEntry("_id", 5);
@@ -49,7 +49,7 @@ class MongoToKafkaParserTest {
             .append("source", "users")
             .append("documentKey", new Document("_id", 7));
 
-    CdcEnvelop result = MongoToKafkaParser.from(doc);
+    StreamEnvelop result = MongoToKafkaParser.from(doc);
 
     assertThat(result.getOperation()).isEqualTo("delete");
     assertThat(result.getPayloadAsMap()).containsEntry("_id", 7);

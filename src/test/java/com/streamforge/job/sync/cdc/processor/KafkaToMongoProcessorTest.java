@@ -1,9 +1,9 @@
-package com.streamforge.job.cdcsync.processor;
+package com.streamforge.job.sync.cdc.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
-import com.streamforge.core.model.CdcEnvelop;
+import com.streamforge.core.model.StreamEnvelop;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,12 +17,12 @@ class KafkaToMongoProcessorTest {
     Map<String, Object> payload = new HashMap<>();
     payload.put("id", 42);
 
-    CdcEnvelop envelop = CdcEnvelop.of("insert", "orders", payload);
+    StreamEnvelop envelop = StreamEnvelop.of("insert", "orders", payload);
     envelop.setTraceId(null);
     envelop.setProcessedTime(null);
 
     // when
-    CdcEnvelop result = invokeEnrich(envelop);
+    StreamEnvelop result = invokeEnrich(envelop);
 
     // then
     assertThat(result).isNotNull();
@@ -37,12 +37,12 @@ class KafkaToMongoProcessorTest {
     Map<String, Object> payload = new HashMap<>();
     payload.put("id", 42);
 
-    CdcEnvelop envelop = CdcEnvelop.of("insert", "orders", payload);
+    StreamEnvelop envelop = StreamEnvelop.of("insert", "orders", payload);
     envelop.setTraceId("trace-abc-999");
     envelop.setProcessedTime(null);
 
     // when
-    CdcEnvelop result = invokeEnrich(envelop);
+    StreamEnvelop result = invokeEnrich(envelop);
 
     // then
     assertThat(result).isNotNull();
@@ -57,11 +57,11 @@ class KafkaToMongoProcessorTest {
         .hasMessageContaining("Envelop cannot be null");
   }
 
-  private CdcEnvelop invokeEnrich(CdcEnvelop envelop) {
+  private StreamEnvelop invokeEnrich(StreamEnvelop envelop) {
     try {
-      var method = KafkaToMongoProcessor.class.getDeclaredMethod("enrich", CdcEnvelop.class);
+      var method = KafkaToMongoProcessor.class.getDeclaredMethod("enrich", StreamEnvelop.class);
       method.setAccessible(true);
-      return (CdcEnvelop) method.invoke(null, envelop);
+      return (StreamEnvelop) method.invoke(null, envelop);
     } catch (Exception e) {
       if (e.getCause() != null) {
         if (e.getCause() instanceof RuntimeException re) {

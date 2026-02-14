@@ -1,13 +1,13 @@
-package com.streamforge.job.cdcsync.parser;
+package com.streamforge.job.sync.cdc.parser;
 
 import com.streamforge.core.config.ErrorCodes;
 import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
-import com.streamforge.core.model.CdcEnvelop;
 import com.streamforge.core.model.DlqEvent;
+import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.cdcsync.MongoToKafkaJob;
+import com.streamforge.job.sync.cdc.MongoToKafkaJob;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -19,15 +19,15 @@ import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class MongoToKafkaParser implements PipelineBuilder.ParserFunction<Document, CdcEnvelop> {
+public class MongoToKafkaParser implements PipelineBuilder.ParserFunction<Document, StreamEnvelop> {
 
   private static final Logger log = LoggerFactory.getLogger(MongoToKafkaParser.class);
 
   @Override
-  public DataStream<CdcEnvelop> parse(DataStream<Document> input) {
+  public DataStream<StreamEnvelop> parse(DataStream<Document> input) {
     return input
         .map(
-            new RichMapFunction<Document, CdcEnvelop>() {
+            new RichMapFunction<Document, StreamEnvelop>() {
 
               private transient Metrics metrics;
 
@@ -41,14 +41,14 @@ public class MongoToKafkaParser implements PipelineBuilder.ParserFunction<Docume
               }
 
               @Override
-              public CdcEnvelop map(Document doc) {
+              public StreamEnvelop map(Document doc) {
                 try {
-                  CdcEnvelop env = MongoToKafkaParser.from(doc);
+                  StreamEnvelop env = MongoToKafkaParser.from(doc);
                   metrics.inc(MetricKeys.PARSER_SUCCESS_COUNT);
                   return env;
                 } catch (Exception e) {
                   metrics.inc(MetricKeys.PARSER_ERROR_COUNT);
-                  log.warn("Failed to parse CDC Document to CdcEnvelop: {}", doc, e);
+                  log.warn("Failed to parse Document to StreamEnvelop: {}", doc, e);
 
                   DlqEvent dlqEvent =
                       DlqEvent.of(
@@ -67,7 +67,7 @@ public class MongoToKafkaParser implements PipelineBuilder.ParserFunction<Docume
   }
 
   @SuppressWarnings("unchecked")
-  public static CdcEnvelop from(Document doc) {
+  public static StreamEnvelop from(Document doc) {
     try {
       String op = null;
       if (doc.containsKey("op")) {
@@ -137,14 +137,14 @@ public class MongoToKafkaParser implements PipelineBuilder.ParserFunction<Docume
         primaryKey = String.valueOf(payload.get("_id"));
       }
 
-      return CdcEnvelop.of(
+      return StreamEnvelop.of(
           operation,
           doc.getString("source") != null ? doc.getString("source") : "unknown",
           payload,
           primaryKey);
 
     } catch (Exception e) {
-      log.warn("Failed to map Document to CdcEnvelop: {}", doc, e);
+      log.warn("Failed to map Document to StreamEnvelop: {}", doc, e);
       throw e;
     }
   }

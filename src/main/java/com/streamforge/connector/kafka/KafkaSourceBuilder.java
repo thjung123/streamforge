@@ -25,8 +25,8 @@ public class KafkaSourceBuilder implements PipelineBuilder.SourceBuilder<String>
     KafkaSource<String> source =
         KafkaSource.<String>builder()
             .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
-            .setTopics(require(CDC_TOPIC))
-            .setGroupId("cdc-group")
+            .setTopics(require(STREAM_TOPIC))
+            .setGroupId("stream-group")
             .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.LATEST))
             .setValueOnlyDeserializer(new SimpleStringSchema())
             .build();

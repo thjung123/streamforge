@@ -7,8 +7,8 @@ import static com.streamforge.core.config.ScopedConfig.*;
 
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
-import com.streamforge.core.model.CdcEnvelop;
 import com.streamforge.core.model.DlqEvent;
+import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
 import com.streamforge.core.util.JsonUtils;
 import java.util.Properties;
@@ -22,22 +22,22 @@ import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop> {
+public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<StreamEnvelop> {
 
   private static final Logger log = LoggerFactory.getLogger(KafkaSinkBuilder.class);
   public static final String OPERATOR_NAME = "KafkaSink";
 
   @Override
-  public DataStreamSink<CdcEnvelop> write(DataStream<CdcEnvelop> stream, String jobName) {
+  public DataStreamSink<StreamEnvelop> write(DataStream<StreamEnvelop> stream, String jobName) {
     return stream.map(new MetricsMapFunction(jobName)).sinkTo(buildKafkaSink()).name(OPERATOR_NAME);
   }
 
-  private static KafkaSink<CdcEnvelop> buildKafkaSink() {
-    return KafkaSink.<CdcEnvelop>builder()
+  private static KafkaSink<StreamEnvelop> buildKafkaSink() {
+    return KafkaSink.<StreamEnvelop>builder()
         .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
         .setRecordSerializer(
-            KafkaRecordSerializationSchema.<CdcEnvelop>builder()
-                .setTopic(require(CDC_TOPIC))
+            KafkaRecordSerializationSchema.<StreamEnvelop>builder()
+                .setTopic(require(STREAM_TOPIC))
                 .setValueSerializationSchema(envelop -> JsonUtils.toJson(envelop).getBytes())
                 .build())
         .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
@@ -59,7 +59,7 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop>
     return props;
   }
 
-  static class MetricsMapFunction extends RichMapFunction<CdcEnvelop, CdcEnvelop> {
+  static class MetricsMapFunction extends RichMapFunction<StreamEnvelop, StreamEnvelop> {
 
     private transient Metrics metrics;
     private final String jobName;
@@ -75,7 +75,7 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<CdcEnvelop>
     }
 
     @Override
-    public CdcEnvelop map(CdcEnvelop envelop) {
+    public StreamEnvelop map(StreamEnvelop envelop) {
       try {
         metrics.inc(SINK_SUCCESS_COUNT);
         return envelop;

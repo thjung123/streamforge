@@ -33,4 +33,4 @@ services:
 
 networks:
   default:
-    name: flink-cdc-network
+    name: streamforge-network
