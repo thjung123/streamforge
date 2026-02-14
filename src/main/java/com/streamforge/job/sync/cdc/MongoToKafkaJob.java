@@ -7,6 +7,7 @@ import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.pipeline.PipelineBuilder;
 import com.streamforge.job.sync.cdc.parser.MongoToKafkaParser;
 import com.streamforge.job.sync.cdc.processor.MongoToKafkaProcessor;
+import com.streamforge.pattern.filter.FilterInterceptor;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -26,6 +27,7 @@ public class MongoToKafkaJob implements StreamJob {
     env.setParallelism(1);
     PipelineBuilder.from(new MongoChangeStreamSource().build(env, name()))
         .parse(new MongoToKafkaParser())
+        .apply(new FilterInterceptor<>(e -> !"unknown".equals(e.getOperation())))
         .process(new MongoToKafkaProcessor())
         .to(new KafkaSinkBuilder(), name());
 
