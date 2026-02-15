@@ -30,6 +30,15 @@ public final class MetricKeys {
 
   public static final String LATENCY_ALERT_COUNT = "latency.alert_count";
 
+  public static final String FLOW_DISRUPTION_COUNT = "flow.disruption_count";
+  public static final String FLOW_RECOVERY_COUNT = "flow.recovery_count";
+
+  public static final String OBSERVER_TOTAL_COUNT = "observer.total_events";
+
+  public static final String LATE_EVENT_COUNT = "late.event_count";
+
+  public static final String DECORATOR_EVENT_COUNT = "decorator.event_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }

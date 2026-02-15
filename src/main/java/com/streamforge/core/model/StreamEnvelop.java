@@ -4,6 +4,7 @@ import com.streamforge.core.util.JsonUtils;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -21,10 +22,11 @@ public class StreamEnvelop implements Serializable {
   private String operation;
   private String source;
   private String payloadJson;
-  private Instant eventTime;
+  private Instant eventTime; // TODO: convert to long(epochMilli) to avoid Kryo fallback
   private Instant processedTime;
   private String traceId;
   private String primaryKey;
+  @Builder.Default private Map<String, String> metadata = new HashMap<>();
 
   public static StreamEnvelop of(
       String operation, String source, Map<String, Object> payload, String primaryKey) {
