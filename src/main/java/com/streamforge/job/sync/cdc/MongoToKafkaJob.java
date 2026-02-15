@@ -10,10 +10,7 @@ import com.streamforge.job.sync.cdc.parser.MongoToKafkaParser;
 import com.streamforge.job.sync.cdc.processor.MongoToKafkaProcessor;
 import com.streamforge.pattern.dedup.Deduplicator;
 import com.streamforge.pattern.filter.FilterInterceptor;
-import com.streamforge.pattern.observability.FlowDisruptionDetector;
-import com.streamforge.pattern.observability.LatencyDetector;
-import com.streamforge.pattern.observability.OnlineObserver;
-import com.streamforge.pattern.observability.QualityCheck;
+import com.streamforge.pattern.observability.*;
 import java.time.Duration;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -44,6 +41,7 @@ public class MongoToKafkaJob implements StreamJob {
             new OnlineObserver<>(
                 QualityCheck.of("null_payloads", e -> e.getPayloadJson() == null),
                 QualityCheck.of("null_keys", e -> e.getPrimaryKey() == null)))
+        .apply(new MetadataDecorator<>(StreamEnvelop::getMetadata, "pre-sink"))
         .process(new MongoToKafkaProcessor())
         .to(new KafkaSinkBuilder(), name());
 
