@@ -33,6 +33,8 @@ public final class MetricKeys {
   public static final String FLOW_DISRUPTION_COUNT = "flow.disruption_count";
   public static final String FLOW_RECOVERY_COUNT = "flow.recovery_count";
 
+  public static final String OBSERVER_TOTAL_COUNT = "observer.total_events";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }
