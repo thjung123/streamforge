@@ -10,6 +10,7 @@ import com.streamforge.job.sync.cdc.parser.MongoToKafkaParser;
 import com.streamforge.job.sync.cdc.processor.MongoToKafkaProcessor;
 import com.streamforge.pattern.dedup.Deduplicator;
 import com.streamforge.pattern.filter.FilterInterceptor;
+import com.streamforge.pattern.observability.FlowDisruptionDetector;
 import com.streamforge.pattern.observability.LatencyDetector;
 import java.time.Duration;
 import org.apache.flink.api.common.JobExecutionResult;
@@ -31,6 +32,7 @@ public class MongoToKafkaJob implements StreamJob {
     env.setParallelism(1);
     PipelineBuilder.from(new MongoChangeStreamSource().build(env, name()))
         .parse(new MongoToKafkaParser())
+        .apply(new FlowDisruptionDetector<>(StreamEnvelop::getSource, Duration.ofMinutes(5)))
         .apply(new FilterInterceptor<>(e -> !"unknown".equals(e.getOperation())))
         .apply(
             new Deduplicator<>(
