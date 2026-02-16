@@ -43,7 +43,7 @@ public class MongoToKafkaJob implements StreamJob {
                 QualityCheck.of("null_keys", e -> e.getPrimaryKey() == null)))
         .apply(new MetadataDecorator<>(StreamEnvelop::getMetadata, "pre-sink"))
         .process(new MongoToKafkaProcessor())
-        .to(new KafkaSinkBuilder(), name());
+        .to(KafkaSinkBuilder.exactlyOnce("txn-" + name()), name());
 
     return env;
   }

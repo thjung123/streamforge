@@ -5,6 +5,7 @@ import static com.streamforge.core.config.ErrorCodes.SINK_ERROR;
 import static com.streamforge.core.config.MetricKeys.*;
 import static com.streamforge.core.config.ScopedConfig.*;
 
+import com.streamforge.core.config.CheckpointConfig;
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.model.DlqEvent;
@@ -27,25 +28,50 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<StreamEnvel
   private static final Logger log = LoggerFactory.getLogger(KafkaSinkBuilder.class);
   public static final String OPERATOR_NAME = "KafkaSink";
 
+  private final DeliveryGuarantee guarantee;
+  private final String transactionalIdPrefix;
+
+  public KafkaSinkBuilder() {
+    this(DeliveryGuarantee.AT_LEAST_ONCE, null);
+  }
+
+  public KafkaSinkBuilder(DeliveryGuarantee guarantee, String transactionalIdPrefix) {
+    this.guarantee = guarantee;
+    this.transactionalIdPrefix = transactionalIdPrefix;
+  }
+
+  public static KafkaSinkBuilder exactlyOnce(String transactionalIdPrefix) {
+    return new KafkaSinkBuilder(DeliveryGuarantee.EXACTLY_ONCE, transactionalIdPrefix);
+  }
+
   @Override
   public DataStreamSink<StreamEnvelop> write(DataStream<StreamEnvelop> stream, String jobName) {
+    if (guarantee == DeliveryGuarantee.EXACTLY_ONCE) {
+      CheckpointConfig.enableExactlyOnce(stream.getExecutionEnvironment());
+    }
     return stream.map(new MetricsMapFunction(jobName)).sinkTo(buildKafkaSink()).name(OPERATOR_NAME);
   }
 
-  private static KafkaSink<StreamEnvelop> buildKafkaSink() {
-    return KafkaSink.<StreamEnvelop>builder()
-        .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
-        .setRecordSerializer(
-            KafkaRecordSerializationSchema.<StreamEnvelop>builder()
-                .setTopic(require(STREAM_TOPIC))
-                .setValueSerializationSchema(envelop -> JsonUtils.toJson(envelop).getBytes())
-                .build())
-        .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
-        .setKafkaProducerConfig(defaultProducerConfig())
-        .build();
+  private KafkaSink<StreamEnvelop> buildKafkaSink() {
+    var builder =
+        KafkaSink.<StreamEnvelop>builder()
+            .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
+            .setRecordSerializer(
+                KafkaRecordSerializationSchema.<StreamEnvelop>builder()
+                    .setTopic(require(STREAM_TOPIC))
+                    .setValueSerializationSchema(envelop -> JsonUtils.toJson(envelop).getBytes())
+                    .build())
+            .setDeliveryGuarantee(guarantee)
+            .setKafkaProducerConfig(producerConfig());
+
+    if (guarantee == DeliveryGuarantee.EXACTLY_ONCE && transactionalIdPrefix != null) {
+      builder.setTransactionalIdPrefix(transactionalIdPrefix);
+    }
+
+    return builder.build();
   }
 
-  private static Properties defaultProducerConfig() {
+  private Properties producerConfig() {
     Properties props = new Properties();
     props.setProperty("acks", "all");
     props.setProperty("retries", "10");
@@ -56,7 +82,21 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<StreamEnvel
     props.setProperty("max.block.ms", "120000");
     props.setProperty("delivery.timeout.ms", "180000");
     props.setProperty("request.timeout.ms", "120000");
+
+    if (guarantee == DeliveryGuarantee.EXACTLY_ONCE) {
+      props.setProperty("enable.idempotence", "true");
+      props.setProperty("transaction.timeout.ms", "900000");
+    }
+
     return props;
+  }
+
+  DeliveryGuarantee getGuarantee() {
+    return guarantee;
+  }
+
+  String getTransactionalIdPrefix() {
+    return transactionalIdPrefix;
   }
 
   static class MetricsMapFunction extends RichMapFunction<StreamEnvelop, StreamEnvelop> {
