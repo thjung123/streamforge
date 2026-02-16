@@ -3,6 +3,7 @@ package com.streamforge.pattern.observability;
 import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.pipeline.PipelineBuilder;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.Map;
 import org.apache.flink.api.common.functions.RichMapFunction;
@@ -22,6 +23,11 @@ public class MetadataDecorator<T> implements PipelineBuilder.StreamPattern<T> {
   @Override
   public DataStream<T> apply(DataStream<T> stream) {
     return stream.map(new DecoratorFunction<>(metadataAccessor, stageName, name())).name(name());
+  }
+
+  @FunctionalInterface
+  public interface MetadataAccessor<T> extends Serializable {
+    Map<String, String> getMetadata(T value);
   }
 
   static class DecoratorFunction<T> extends RichMapFunction<T, T> {

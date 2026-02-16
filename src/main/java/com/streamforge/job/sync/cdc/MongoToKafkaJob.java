@@ -10,8 +10,10 @@ import com.streamforge.job.sync.cdc.parser.MongoToKafkaParser;
 import com.streamforge.job.sync.cdc.processor.MongoToKafkaProcessor;
 import com.streamforge.pattern.dedup.Deduplicator;
 import com.streamforge.pattern.filter.FilterInterceptor;
+import com.streamforge.pattern.merge.StatefulMerger;
 import com.streamforge.pattern.observability.*;
 import java.time.Duration;
+import java.util.Set;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -36,6 +38,11 @@ public class MongoToKafkaJob implements StreamJob {
         .apply(
             new Deduplicator<>(
                 e -> e.getPrimaryKey() + ":" + e.getEventTime(), Duration.ofMinutes(10)))
+        .apply(
+            new StatefulMerger<>(
+                StreamEnvelop::getPrimaryKey,
+                StreamEnvelop::getPayloadAsMap,
+                Set.of("updatedAt", "modifiedAt")))
         .apply(new LatencyDetector<>(StreamEnvelop::getEventTime, Duration.ofSeconds(30)))
         .apply(
             new OnlineObserver<>(

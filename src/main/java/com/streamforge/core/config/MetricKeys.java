@@ -39,6 +39,9 @@ public final class MetricKeys {
 
   public static final String DECORATOR_EVENT_COUNT = "decorator.event_count";
 
+  public static final String MERGER_PASS_COUNT = "merger.pass_count";
+  public static final String MERGER_SUPPRESSED_COUNT = "merger.suppressed_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }
