@@ -44,7 +44,8 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
     consumer.subscribe(List.of(KAFKA_TOPIC_MAIN));
 
     MongoToKafkaJob job = new MongoToKafkaJob();
-    StreamExecutionEnvironment env = job.buildPipeline();
+    StreamExecutionEnvironment env =
+        job.buildPipeline(new com.streamforge.connector.kafka.KafkaSinkBuilder());
 
     Thread flinkThread =
         new Thread(
@@ -52,7 +53,8 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
               try {
                 env.execute("mongo-to-kafka-test-job");
               } catch (Exception e) {
-                System.err.println("[ERROR] Flink execution failed: " + e.getMessage());
+                System.out.println("[ERROR] Flink execution failed: " + e.getMessage());
+                e.printStackTrace(System.out);
               }
             });
     flinkThread.setDaemon(true);

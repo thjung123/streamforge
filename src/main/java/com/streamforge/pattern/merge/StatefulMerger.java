@@ -5,6 +5,7 @@ import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.pipeline.PipelineBuilder;
 import java.io.Serializable;
 import java.time.Duration;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -77,7 +78,7 @@ public class StatefulMerger<T> implements PipelineBuilder.StreamPattern<T> {
         Duration ttl,
         String operatorName) {
       this.payloadExtractor = payloadExtractor;
-      this.excludedFields = excludedFields;
+      this.excludedFields = new LinkedHashSet<>(excludedFields);
       this.ttl = ttl;
       this.operatorName = operatorName;
     }
