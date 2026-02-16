@@ -10,8 +10,13 @@ import com.streamforge.job.sync.cdc.parser.MongoToKafkaParser;
 import com.streamforge.job.sync.cdc.processor.MongoToKafkaProcessor;
 import com.streamforge.pattern.dedup.Deduplicator;
 import com.streamforge.pattern.filter.FilterInterceptor;
+import com.streamforge.pattern.merge.StatefulMerger;
 import com.streamforge.pattern.observability.*;
+import com.streamforge.pattern.schema.SchemaEnforcer;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -27,6 +32,10 @@ public class MongoToKafkaJob implements StreamJob {
   }
 
   public StreamExecutionEnvironment buildPipeline() {
+    return buildPipeline(KafkaSinkBuilder.exactlyOnce("txn-" + name()));
+  }
+
+  public StreamExecutionEnvironment buildPipeline(PipelineBuilder.SinkBuilder<StreamEnvelop> sink) {
     StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
     env.setParallelism(1);
     PipelineBuilder.from(new MongoChangeStreamSource().build(env, name()))
@@ -36,6 +45,18 @@ public class MongoToKafkaJob implements StreamJob {
         .apply(
             new Deduplicator<>(
                 e -> e.getPrimaryKey() + ":" + e.getEventTime(), Duration.ofMinutes(10)))
+        .apply(
+            new StatefulMerger<>(
+                StreamEnvelop::getPrimaryKey,
+                e -> {
+                  Map<String, Object> map = new HashMap<>();
+                  map.put("__op", e.getOperation());
+                  Map<String, Object> payload = e.getPayloadAsMap();
+                  if (payload != null) map.putAll(payload);
+                  return map;
+                },
+                Set.of("updatedAt", "modifiedAt")))
+        .apply(new SchemaEnforcer<>(StreamEnvelop::getPayloadAsMap, MongoToKafkaSchema.VERSIONS))
         .apply(new LatencyDetector<>(StreamEnvelop::getEventTime, Duration.ofSeconds(30)))
         .apply(
             new OnlineObserver<>(
@@ -43,7 +64,7 @@ public class MongoToKafkaJob implements StreamJob {
                 QualityCheck.of("null_keys", e -> e.getPrimaryKey() == null)))
         .apply(new MetadataDecorator<>(StreamEnvelop::getMetadata, "pre-sink"))
         .process(new MongoToKafkaProcessor())
-        .to(new KafkaSinkBuilder(), name());
+        .to(sink, name());
 
     return env;
   }

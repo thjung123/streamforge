@@ -44,7 +44,8 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
     consumer.subscribe(List.of(KAFKA_TOPIC_MAIN));
 
     MongoToKafkaJob job = new MongoToKafkaJob();
-    StreamExecutionEnvironment env = job.buildPipeline();
+    StreamExecutionEnvironment env =
+        job.buildPipeline(new com.streamforge.connector.kafka.KafkaSinkBuilder());
 
     Thread flinkThread =
         new Thread(
@@ -52,7 +53,8 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
               try {
                 env.execute("mongo-to-kafka-test-job");
               } catch (Exception e) {
-                System.err.println("[ERROR] Flink execution failed: " + e.getMessage());
+                System.out.println("[ERROR] Flink execution failed: " + e.getMessage());
+                e.printStackTrace(System.out);
               }
             });
     flinkThread.setDaemon(true);
@@ -63,6 +65,8 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
   }
 
   @Test
+  @Order(1)
+  @DisplayName("CDC insert/update/delete flow with metadata verification")
   void testInsertUpdateDeleteFlow() {
     MongoCollection<Document> collection =
         mongoClient.getDatabase(MONGO_DB_NAME).getCollection(MONGO_COLLECTION);
@@ -75,6 +79,12 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
     assertThat(insertEnv.getPayloadAsMap().get("name"))
         .as("Inserted name must be Alice")
         .isEqualTo("Alice");
+
+    assertThat(insertEnv.getMetadata()).isNotNull();
+    assertThat(insertEnv.getMetadata()).containsKey("stage.pre-sink.processedAt");
+    assertThat(insertEnv.getMetadata()).containsKey("stage.pre-sink.taskName");
+    assertThat(insertEnv.getMetadata()).containsKey("stage.pre-sink.subtaskIndex");
+    System.out.println("[VERIFY] Metadata: " + insertEnv.getMetadata());
 
     System.out.println("\n=== [STEP] UPDATE ===");
     collection.updateOne(
@@ -93,12 +103,42 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
       System.err.println("[WARN] 'name' field missing in update payload → running in delta mode");
     }
 
+    assertThat(updateEnv.getMetadata()).containsKey("stage.pre-sink.processedAt");
+
     System.out.println("\n=== [STEP] DELETE ===");
     collection.deleteOne(new Document("_id", 1));
     String deleteJson = waitForKafkaEvent("\"operation\":\"delete\"", Duration.ofSeconds(20));
     StreamEnvelop deleteEnv = StreamEnvelop.fromJson(deleteJson);
     assertThat(deleteEnv.getOperation()).isEqualToIgnoringCase("delete");
     assertThat(deleteEnv.getPayloadAsMap().get("_id")).isEqualTo(1);
+  }
+
+  @Test
+  @Order(2)
+  @DisplayName("Batch inserts produce exact message count — no duplicates, no drops")
+  void testBatchInsertExactCount() {
+    MongoCollection<Document> collection =
+        mongoClient.getDatabase(MONGO_DB_NAME).getCollection(MONGO_COLLECTION);
+
+    int batchSize = 5;
+    System.out.println("\n=== [BATCH] Inserting " + batchSize + " documents ===");
+    for (int i = 100; i < 100 + batchSize; i++) {
+      collection.insertOne(new Document("_id", i).append("name", "user-" + i));
+    }
+
+    List<StreamEnvelop> received = collectKafkaEvents(batchSize, Duration.ofSeconds(30));
+
+    assertThat(received).hasSize(batchSize);
+
+    Set<Object> receivedIds = new HashSet<>();
+    for (StreamEnvelop env : received) {
+      assertThat(env.getOperation()).isEqualToIgnoringCase("insert");
+      receivedIds.add(env.getPayloadAsMap().get("_id"));
+      assertThat(env.getMetadata()).containsKey("stage.pre-sink.processedAt");
+    }
+
+    assertThat(receivedIds).hasSize(batchSize);
+    System.out.println("[VERIFY] Received exactly " + batchSize + " unique events");
   }
 
   private String waitForKafkaEvent(String keyword, Duration timeout) {
@@ -118,6 +158,20 @@ public class MongoToKafkaIntegrationTest extends BaseIntegrationTest {
     }
     throw new AssertionError(
         "No Kafka event found with keyword: " + keyword + " within " + timeout.toSeconds() + "s");
+  }
+
+  private List<StreamEnvelop> collectKafkaEvents(int expectedCount, Duration timeout) {
+    List<StreamEnvelop> events = new ArrayList<>();
+    long end = System.currentTimeMillis() + timeout.toMillis();
+    while (events.size() < expectedCount && System.currentTimeMillis() < end) {
+      var polled = consumer.poll(Duration.ofMillis(500));
+      for (ConsumerRecord<String, String> record : polled) {
+        System.out.println("[KAFKA] " + record.value());
+        StreamEnvelop env = StreamEnvelop.fromJson(record.value());
+        events.add(env);
+      }
+    }
+    return events;
   }
 
   @AfterAll
