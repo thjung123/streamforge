@@ -45,6 +45,8 @@ public final class MetricKeys {
   public static final String SCHEMA_PASS_COUNT = "schema.pass_count";
   public static final String SCHEMA_VIOLATION_COUNT = "schema.violation_count";
 
+  public static final String SPLITTER_UNMATCHED_COUNT = "splitter.unmatched_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }
