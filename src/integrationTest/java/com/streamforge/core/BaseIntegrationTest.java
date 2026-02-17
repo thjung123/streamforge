@@ -17,6 +17,7 @@ import org.bson.Document;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.testcontainers.containers.MongoDBContainer;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
@@ -36,12 +37,19 @@ public abstract class BaseIntegrationTest {
           .withCommand("--replSet", "rs0", "--bind_ip_all")
           .withExposedPorts(27017);
 
+  @Container
+  protected static final ElasticsearchContainer elasticsearch =
+      new ElasticsearchContainer("docker.elastic.co/elasticsearch/elasticsearch:7.17.25")
+          .withEnv("discovery.type", "single-node")
+          .withEnv("xpack.security.enabled", "false");
+
   protected static MongoClient mongoClient;
 
   protected static final String KAFKA_TOPIC_MAIN = "stream-topic";
   protected static final String KAFKA_TOPIC_DLQ = "stream-dlq";
   protected static final String MONGO_DB_NAME = "streamforge_test";
   protected static final String MONGO_COLLECTION = "events";
+  protected static final String ES_INDEX = "stream-events";
 
   @BeforeAll
   static void setUpEnvironment() throws Exception {
@@ -82,6 +90,10 @@ public abstract class BaseIntegrationTest {
     System.setProperty("STREAM_TOPIC", KAFKA_TOPIC_MAIN);
     System.setProperty("DLQ_TOPIC", KAFKA_TOPIC_DLQ);
 
+    System.setProperty("ES_HOST", "http://" + elasticsearch.getHttpHostAddress());
+    System.setProperty("ES_INDEX", ES_INDEX);
+
+    System.out.println("[INIT] ES Host: http://" + elasticsearch.getHttpHostAddress());
     System.out.println("[INIT] Test environment ready");
   }
 
@@ -98,6 +110,7 @@ public abstract class BaseIntegrationTest {
     }
     kafka.stop();
     mongo.stop();
+    elasticsearch.stop();
   }
 
   private static void waitForMongoAvailable(String uri, Duration timeout)
