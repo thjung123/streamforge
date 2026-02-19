@@ -47,6 +47,8 @@ public final class MetricKeys {
 
   public static final String SPLITTER_UNMATCHED_COUNT = "splitter.unmatched_count";
 
+  public static final String FANIN_MERGED_COUNT = "fanin.merged_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }

@@ -4,7 +4,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.lang.reflect.Field;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -65,5 +68,15 @@ class JobRegistryTest {
     assertTrue(jobNames.contains("dummy-job"));
     assertTrue(jobNames.contains("another-job"));
     assertEquals(2, jobNames.size());
+  }
+
+  @Test
+  @DisplayName("MergedIngestJob should be registered via SPI")
+  void mergedIngestJobRegisteredViaSpi() {
+    Set<String> jobNames =
+        StreamSupport.stream(ServiceLoader.load(StreamJob.class).spliterator(), false)
+            .map(StreamJob::name)
+            .collect(Collectors.toSet());
+    assertTrue(jobNames.contains("MergedIngest"));
   }
 }

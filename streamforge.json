@@ -13,5 +13,11 @@
     "STREAM_TOPIC": "mongo-events",
     "MONGO_DB": "sink_db",
     "MONGO_COLLECTION": "orders_mirror"
+  },
+  "MergedIngest": {
+    "STREAM_TOPIC": "orders-events",
+    "STREAM_TOPIC_SECONDARY": "payments-events",
+    "MONGO_DB": "sink_db",
+    "MONGO_COLLECTION": "merged_events"
   }
 }

@@ -147,7 +147,7 @@ public abstract class BaseIntegrationTest {
     throw new IllegalStateException("Replica set not PRIMARY");
   }
 
-  private static void createKafkaTopic(String topicName)
+  protected static void createKafkaTopic(String topicName)
       throws ExecutionException, InterruptedException {
     try (AdminClient admin =
         AdminClient.create(Map.of("bootstrap.servers", kafka.getBootstrapServers()))) {
