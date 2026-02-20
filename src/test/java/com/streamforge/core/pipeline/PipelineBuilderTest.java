@@ -3,7 +3,10 @@ package com.streamforge.core.pipeline;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import com.streamforge.pattern.enrich.StaticJoiner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.state.MapStateDescriptor;
+import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.connector.datagen.source.DataGeneratorSource;
 import org.apache.flink.connector.datagen.source.GeneratorFunction;
@@ -65,6 +68,33 @@ class PipelineBuilderTest {
     PipelineBuilder.from(source).to(sink, "test-job");
 
     verify(sink, times(1)).write(any(), eq("test-job"));
+  }
+
+  @Test
+  @DisplayName("enrich() should return non-null builder with enriched stream")
+  void testEnrich() {
+    StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    DataGeneratorSource<String> refGenerator =
+        new DataGeneratorSource<>(
+            (GeneratorFunction<Long, String>) value -> "ref-" + value, 3, Types.STRING);
+    DataStream<String> refStream =
+        env.fromSource(refGenerator, WatermarkStrategy.noWatermarks(), "ref-generator");
+
+    MapStateDescriptor<String, String> descriptor =
+        new MapStateDescriptor<>(
+            "ref-state", BasicTypeInfo.STRING_TYPE_INFO, BasicTypeInfo.STRING_TYPE_INFO);
+
+    PipelineBuilder.JoinPattern<String, String> joiner =
+        StaticJoiner.<String, String>builder()
+            .mainKeyExtractor(value -> value)
+            .refKeyExtractor(value -> value)
+            .joinFunction((event, refData) -> event + "+" + refData)
+            .descriptor(descriptor)
+            .build();
+
+    PipelineBuilder<String> builder = PipelineBuilder.from(source).enrich(refStream, joiner);
+
+    assertNotNull(builder, "Builder after enrich should not be null");
   }
 
   @Test

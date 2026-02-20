@@ -36,6 +36,7 @@ dependencies {
     implementation("org.apache.flink:flink-connector-base:$flinkVersion")
     implementation("org.apache.flink:flink-connector-kafka:3.3.0-1.20")
     implementation("org.apache.flink:flink-connector-mongodb:1.2.0-1.18")
+    implementation("org.apache.flink:flink-connector-elasticsearch7:3.1.0-1.18")
     implementation("org.apache.flink:flink-connector-datagen:$flinkVersion")
 
     // Utilities
@@ -76,11 +77,13 @@ dependencies {
     testImplementation("org.mockito:mockito-junit-jupiter:5.14.2")
     testImplementation("org.mockito:mockito-inline:5.2.0")
     testImplementation("org.assertj:assertj-core:3.27.0")
+    testImplementation("org.awaitility:awaitility:4.2.2")
 
     // Testcontainers
     testImplementation("org.testcontainers:junit-jupiter:1.21.4")
     testImplementation("org.testcontainers:kafka:1.21.4")
     testImplementation("org.testcontainers:mongodb:1.21.4")
+    testImplementation("org.testcontainers:elasticsearch:1.21.4")
 }
 
 // Force transitive dependency overrides for CVEs

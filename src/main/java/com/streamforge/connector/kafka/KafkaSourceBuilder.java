@@ -22,10 +22,14 @@ public class KafkaSourceBuilder implements PipelineBuilder.SourceBuilder<String>
 
   @Override
   public DataStream<String> build(StreamExecutionEnvironment env, String jobName) {
+    return build(env, jobName, require(STREAM_TOPIC));
+  }
+
+  public DataStream<String> build(StreamExecutionEnvironment env, String jobName, String topic) {
     KafkaSource<String> source =
         KafkaSource.<String>builder()
             .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
-            .setTopics(require(STREAM_TOPIC))
+            .setTopics(topic)
             .setGroupId("stream-group")
             .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.LATEST))
             .setValueOnlyDeserializer(new SimpleStringSchema())

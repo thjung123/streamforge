@@ -45,6 +45,23 @@ public final class MetricKeys {
   public static final String SCHEMA_PASS_COUNT = "schema.pass_count";
   public static final String SCHEMA_VIOLATION_COUNT = "schema.violation_count";
 
+  public static final String SPLITTER_UNMATCHED_COUNT = "splitter.unmatched_count";
+
+  public static final String FANIN_MERGED_COUNT = "fanin.merged_count";
+
+  public static final String JOINER_MATCH_COUNT = "joiner.match_count";
+  public static final String JOINER_MISS_COUNT = "joiner.miss_count";
+  public static final String JOINER_REF_UPDATE_COUNT = "joiner.ref_update_count";
+
+  public static final String DYNAMIC_JOINER_MATCH_COUNT = "dynamic_joiner.match_count";
+  public static final String DYNAMIC_JOINER_LEFT_PASS_COUNT = "dynamic_joiner.left_pass_count";
+  public static final String DYNAMIC_JOINER_RIGHT_PASS_COUNT = "dynamic_joiner.right_pass_count";
+  public static final String DYNAMIC_JOINER_EXPIRE_COUNT = "dynamic_joiner.expire_count";
+
+  public static final String ASYNC_ENRICHER_SUCCESS_COUNT = "async_enricher.success_count";
+  public static final String ASYNC_ENRICHER_TIMEOUT_COUNT = "async_enricher.timeout_count";
+  public static final String ASYNC_ENRICHER_ERROR_COUNT = "async_enricher.error_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }
