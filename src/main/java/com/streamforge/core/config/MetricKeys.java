@@ -53,6 +53,11 @@ public final class MetricKeys {
   public static final String JOINER_MISS_COUNT = "joiner.miss_count";
   public static final String JOINER_REF_UPDATE_COUNT = "joiner.ref_update_count";
 
+  public static final String DYNAMIC_JOINER_MATCH_COUNT = "dynamic_joiner.match_count";
+  public static final String DYNAMIC_JOINER_LEFT_PASS_COUNT = "dynamic_joiner.left_pass_count";
+  public static final String DYNAMIC_JOINER_RIGHT_PASS_COUNT = "dynamic_joiner.right_pass_count";
+  public static final String DYNAMIC_JOINER_EXPIRE_COUNT = "dynamic_joiner.expire_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }
