@@ -1,5 +1,6 @@
 package com.streamforge.core.pipeline;
 
+import lombok.Getter;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -7,7 +8,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 public class PipelineBuilder<T> {
 
   private final StreamExecutionEnvironment env;
-  private final DataStream<T> stream;
+  @Getter private final DataStream<T> stream;
 
   private PipelineBuilder(StreamExecutionEnvironment env, DataStream<T> stream) {
     this.env = env;
@@ -26,6 +27,11 @@ public class PipelineBuilder<T> {
   public <R> PipelineBuilder<R> process(ProcessorFunction<T, R> processor) {
     DataStream<R> processed = processor.process(this.stream);
     return new PipelineBuilder<>(this.env, processed);
+  }
+
+  public <R> PipelineBuilder<T> enrich(DataStream<R> referenceStream, JoinPattern<T, R> pattern) {
+    DataStream<T> enriched = pattern.join(this.stream, referenceStream);
+    return new PipelineBuilder<>(this.env, enriched);
   }
 
   public PipelineBuilder<T> apply(StreamPattern<T> pattern) {
@@ -67,5 +73,13 @@ public class PipelineBuilder<T> {
     default String name() {
       return getClass().getSimpleName();
     }
+  }
+
+  /**
+   * Interface for two-stream join patterns. Joins a main stream with a reference stream and returns
+   * the enriched main stream.
+   */
+  public interface JoinPattern<T, R> {
+    DataStream<T> join(DataStream<T> mainStream, DataStream<R> referenceStream);
   }
 }

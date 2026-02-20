@@ -41,36 +41,27 @@ public class MergedIngestJob implements StreamJob {
     DataStream<StreamEnvelop> orders = new KafkaToMongoParser().parse(ordersRaw);
 
     String secondaryTopic = require(STREAM_TOPIC_SECONDARY);
-    String originalTopic = System.getProperty(STREAM_TOPIC);
-    try {
-      System.setProperty(STREAM_TOPIC, secondaryTopic);
-      DataStream<String> paymentsRaw = new KafkaSourceBuilder().build(env, name() + "-secondary");
-      DataStream<StreamEnvelop> payments = new KafkaToMongoParser().parse(paymentsRaw);
+    DataStream<String> paymentsRaw =
+        new KafkaSourceBuilder().build(env, name() + "-secondary", secondaryTopic);
+    DataStream<StreamEnvelop> payments = new KafkaToMongoParser().parse(paymentsRaw);
 
-      DataStream<StreamEnvelop> merged =
-          OrderedFanIn.builder(StreamEnvelop::getEventTime)
-              .source("orders", orders)
-              .source("payments", payments)
-              .maxDrift(Duration.ofSeconds(5))
-              .sourceTag(
-                  (sourceName, element) -> {
-                    if (element.getMetadata() == null) {
-                      element.setMetadata(new HashMap<>());
-                    }
-                    element.getMetadata().put("ingestSource", sourceName);
-                    return element;
-                  })
-              .build()
-              .merge();
+    DataStream<StreamEnvelop> merged =
+        OrderedFanIn.builder(StreamEnvelop::getEventTime)
+            .source("orders", orders)
+            .source("payments", payments)
+            .maxDrift(Duration.ofSeconds(5))
+            .sourceTag(
+                (sourceName, element) -> {
+                  if (element.getMetadata() == null) {
+                    element.setMetadata(new HashMap<>());
+                  }
+                  element.getMetadata().put("ingestSource", sourceName);
+                  return element;
+                })
+            .build()
+            .merge();
 
-      sinkBuilder.write(merged, name());
-    } finally {
-      if (originalTopic != null) {
-        System.setProperty(STREAM_TOPIC, originalTopic);
-      } else {
-        System.clearProperty(STREAM_TOPIC);
-      }
-    }
+    sinkBuilder.write(merged, name());
 
     return env;
   }
