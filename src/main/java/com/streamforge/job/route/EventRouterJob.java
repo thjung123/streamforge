@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc;
+package com.streamforge.job.route;
 
 import com.streamforge.connector.elasticsearch.ElasticsearchSinkBuilder;
 import com.streamforge.connector.kafka.KafkaSourceBuilder;
@@ -6,7 +6,7 @@ import com.streamforge.connector.mongo.MongoSinkBuilder;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
-import com.streamforge.job.sync.cdc.parser.KafkaToMongoParser;
+import com.streamforge.job.cdc.parser.KafkaToMongoParser;
 import com.streamforge.pattern.split.ParallelSplitter;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.typeinfo.TypeInformation;

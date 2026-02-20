@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc.parser;
+package com.streamforge.job.cdc.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

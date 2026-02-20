@@ -1,10 +1,9 @@
-package com.streamforge.job;
+package com.streamforge.job.cdc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.streamforge.core.BaseIntegrationTest;
 import com.streamforge.core.model.StreamEnvelop;
-import com.streamforge.job.sync.cdc.KafkaToMongoJob;
 import java.util.Map;
 import java.util.UUID;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;

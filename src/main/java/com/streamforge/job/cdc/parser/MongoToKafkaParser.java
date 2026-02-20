@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc.parser;
+package com.streamforge.job.cdc.parser;
 
 import com.streamforge.core.config.ErrorCodes;
 import com.streamforge.core.config.MetricKeys;
@@ -7,7 +7,7 @@ import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.model.DlqEvent;
 import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.sync.cdc.MongoToKafkaJob;
+import com.streamforge.job.cdc.MongoToKafkaJob;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;

@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc;
+package com.streamforge.job.ingest;
 
 import static com.streamforge.connector.kafka.KafkaConfigKeys.*;
 import static com.streamforge.core.config.ScopedConfig.*;
@@ -9,7 +9,7 @@ import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.sync.cdc.parser.KafkaToMongoParser;
+import com.streamforge.job.cdc.parser.KafkaToMongoParser;
 import com.streamforge.pattern.split.OrderedFanIn;
 import java.time.Duration;
 import java.util.HashMap;

@@ -1,4 +1,4 @@
-com.streamforge.job.sync.cdc.MongoToKafkaJob
-com.streamforge.job.sync.cdc.KafkaToMongoJob
-com.streamforge.job.sync.cdc.EventRouterJob
-com.streamforge.job.sync.cdc.MergedIngestJob
+com.streamforge.job.cdc.MongoToKafkaJob
+com.streamforge.job.cdc.KafkaToMongoJob
+com.streamforge.job.route.EventRouterJob
+com.streamforge.job.ingest.MergedIngestJob

@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc.parser;
+package com.streamforge.job.cdc.parser;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,7 +11,7 @@ import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.model.DlqEvent;
 import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.sync.cdc.KafkaToMongoJob;
+import com.streamforge.job.cdc.KafkaToMongoJob;
 import java.time.Instant;
 import java.util.Objects;
 import org.apache.flink.api.common.functions.RichMapFunction;

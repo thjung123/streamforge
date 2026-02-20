@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc.processor;
+package com.streamforge.job.cdc.processor;
 
 import com.streamforge.core.config.ErrorCodes;
 import com.streamforge.core.config.MetricKeys;
@@ -7,7 +7,7 @@ import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.model.DlqEvent;
 import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.sync.cdc.KafkaToMongoJob;
+import com.streamforge.job.cdc.MongoToKafkaJob;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -17,10 +17,10 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class KafkaToMongoProcessor
+public class MongoToKafkaProcessor
     implements PipelineBuilder.ProcessorFunction<StreamEnvelop, StreamEnvelop> {
 
-  private static final Logger log = LoggerFactory.getLogger(KafkaToMongoProcessor.class);
+  private static final Logger log = LoggerFactory.getLogger(MongoToKafkaProcessor.class);
 
   @Override
   public DataStream<StreamEnvelop> process(DataStream<StreamEnvelop> input) {
@@ -35,10 +35,10 @@ public class KafkaToMongoProcessor
                 metrics =
                     new Metrics(
                         getRuntimeContext(),
-                        KafkaToMongoJob.JOB_NAME,
-                        KafkaToMongoJob.PROCESSOR_NAME);
+                        MongoToKafkaJob.JOB_NAME,
+                        MongoToKafkaJob.PROCESSOR_NAME);
                 DLQPublisher.getInstance()
-                    .initMetrics(getRuntimeContext(), KafkaToMongoJob.JOB_NAME);
+                    .initMetrics(getRuntimeContext(), MongoToKafkaJob.JOB_NAME);
               }
 
               @Override
@@ -55,7 +55,7 @@ public class KafkaToMongoProcessor
                       DlqEvent.of(
                           ErrorCodes.PROCESSING_ERROR,
                           e.getMessage(),
-                          KafkaToMongoJob.PROCESSOR_NAME,
+                          MongoToKafkaJob.PROCESSOR_NAME,
                           envelop != null ? envelop.toJson() : null,
                           e);
                   DLQPublisher.getInstance().publish(dlqEvent);
@@ -64,20 +64,18 @@ public class KafkaToMongoProcessor
               }
             })
         .filter(Objects::nonNull)
-        .name(KafkaToMongoJob.PROCESSOR_NAME);
+        .name(MongoToKafkaJob.PROCESSOR_NAME);
   }
 
   private static StreamEnvelop enrich(StreamEnvelop envelop) {
     if (envelop == null) {
-      throw new IllegalArgumentException("Envelop cannot be null during processing");
+      return null;
     }
-
     envelop.setProcessedTime(Instant.now());
 
     if (envelop.getTraceId() == null || envelop.getTraceId().isEmpty()) {
       envelop.setTraceId("trace-" + UUID.randomUUID());
     }
-
     return envelop;
   }
 }

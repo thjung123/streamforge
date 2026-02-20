@@ -49,6 +49,10 @@ public final class MetricKeys {
 
   public static final String FANIN_MERGED_COUNT = "fanin.merged_count";
 
+  public static final String JOINER_MATCH_COUNT = "joiner.match_count";
+  public static final String JOINER_MISS_COUNT = "joiner.miss_count";
+  public static final String JOINER_REF_UPDATE_COUNT = "joiner.ref_update_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }

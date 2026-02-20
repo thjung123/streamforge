@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc.processor;
+package com.streamforge.job.cdc.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;

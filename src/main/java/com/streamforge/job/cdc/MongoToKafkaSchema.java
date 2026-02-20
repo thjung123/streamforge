@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc;
+package com.streamforge.job.cdc;
 
 import com.streamforge.pattern.schema.SchemaVersion;
 import com.streamforge.pattern.schema.SchemaVersion.FieldType;

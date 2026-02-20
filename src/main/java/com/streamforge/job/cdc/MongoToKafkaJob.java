@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc;
+package com.streamforge.job.cdc;
 
 import com.streamforge.connector.kafka.KafkaSinkBuilder;
 import com.streamforge.connector.mongo.MongoChangeStreamSource;
@@ -6,8 +6,8 @@ import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.sync.cdc.parser.MongoToKafkaParser;
-import com.streamforge.job.sync.cdc.processor.MongoToKafkaProcessor;
+import com.streamforge.job.cdc.parser.MongoToKafkaParser;
+import com.streamforge.job.cdc.processor.MongoToKafkaProcessor;
 import com.streamforge.pattern.dedup.Deduplicator;
 import com.streamforge.pattern.filter.FilterInterceptor;
 import com.streamforge.pattern.merge.StatefulMerger;

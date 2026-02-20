@@ -1,4 +1,4 @@
-package com.streamforge.job.sync.cdc;
+package com.streamforge.job.ingest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

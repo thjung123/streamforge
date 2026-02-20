@@ -1,4 +1,4 @@
-package com.streamforge.job;
+package com.streamforge.job.route;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -7,7 +7,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.streamforge.core.BaseIntegrationTest;
 import com.streamforge.core.model.StreamEnvelop;
-import com.streamforge.job.sync.cdc.EventRouterJob;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;

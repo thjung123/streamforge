@@ -1,11 +1,10 @@
-package com.streamforge.job;
+package com.streamforge.job.cdc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.mongodb.client.MongoCollection;
 import com.streamforge.core.BaseIntegrationTest;
 import com.streamforge.core.model.StreamEnvelop;
-import com.streamforge.job.sync.cdc.MongoToKafkaJob;
 import java.time.Duration;
 import java.util.*;
 import java.util.Locale;
