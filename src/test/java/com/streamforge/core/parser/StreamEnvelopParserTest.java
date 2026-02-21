@@ -1,4 +1,4 @@
-package com.streamforge.job.cdc.parser;
+package com.streamforge.core.parser;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
@@ -10,7 +10,7 @@ import com.streamforge.core.model.StreamEnvelop;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-class KafkaToMongoParserTest {
+class StreamEnvelopParserTest {
 
   @Test
   void testParse_validJson_shouldReturnStreamEnvelop() throws Exception {
@@ -23,7 +23,7 @@ class KafkaToMongoParserTest {
             .writeValueAsString(envelop);
 
     // when
-    StreamEnvelop result = KafkaToMongoParser.parseJson(json);
+    StreamEnvelop result = StreamEnvelopParser.parseJson(json);
 
     // then
     assertThat(result).isNotNull();
@@ -37,7 +37,7 @@ class KafkaToMongoParserTest {
     // given
     String invalidJson = "{invalid-json}";
 
-    assertThatThrownBy(() -> KafkaToMongoParser.parseJson(invalidJson))
+    assertThatThrownBy(() -> StreamEnvelopParser.parseJson(invalidJson))
         .isInstanceOf(Exception.class)
         .hasMessageContaining("Unexpected character");
   }

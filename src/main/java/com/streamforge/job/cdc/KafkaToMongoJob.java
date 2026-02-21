@@ -5,8 +5,8 @@ import com.streamforge.connector.mongo.MongoSinkBuilder;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
+import com.streamforge.core.parser.StreamEnvelopParser;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.cdc.parser.KafkaToMongoParser;
 import com.streamforge.job.cdc.processor.KafkaToMongoProcessor;
 import com.streamforge.pattern.enrich.StaticJoiner;
 import com.streamforge.pattern.quality.ConstraintEnforcer;
@@ -22,7 +22,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 public class KafkaToMongoJob implements StreamJob {
 
   public static final String JOB_NAME = "KafkaToMongo";
-  public static final String PARSER_NAME = "KafkaToMongoParser";
+  public static final String PARSER_NAME = "StreamEnvelopParser";
   public static final String PROCESSOR_NAME = "KafkaToMongoProcessor";
   public static final String REFERENCE_TOPIC = "REFERENCE_TOPIC";
   public static final String REFERENCE_TOPIC_2 = "REFERENCE_TOPIC_2";
@@ -41,7 +41,7 @@ public class KafkaToMongoJob implements StreamJob {
 
     var builder =
         PipelineBuilder.from(new KafkaSourceBuilder().build(env, name()))
-            .parse(new KafkaToMongoParser());
+            .parse(new StreamEnvelopParser(JOB_NAME));
 
     if (ref1 != null) {
       builder = builder.enrich(ref1, buildJoiner("ref-state-1", "enrichedRef1"));
@@ -66,7 +66,7 @@ public class KafkaToMongoJob implements StreamJob {
     String refTopic = ScopedConfig.require(topicKey);
     DataStream<String> refRaw =
         new KafkaSourceBuilder().build(env, name() + "-" + suffix, refTopic);
-    return new KafkaToMongoParser().parse(refRaw);
+    return new StreamEnvelopParser(JOB_NAME).parse(refRaw);
   }
 
   private StaticJoiner<StreamEnvelop, StreamEnvelop> buildJoiner(

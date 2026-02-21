@@ -7,9 +7,9 @@ import com.streamforge.connector.mongo.MongoSinkBuilder;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
+import com.streamforge.core.parser.StreamEnvelopParser;
 import com.streamforge.core.pipeline.PipelineBuilder;
 import com.streamforge.core.util.JsonUtils;
-import com.streamforge.job.cdc.parser.KafkaToMongoParser;
 import com.streamforge.pattern.session.SessionAnalyzer;
 import com.streamforge.pattern.session.SessionResult;
 import java.time.Duration;
@@ -42,7 +42,7 @@ public class UserSessionAnalysisJob implements StreamJob {
 
     ScopedConfig.require(STREAM_TOPIC);
     DataStream<String> raw = new KafkaSourceBuilder().build(env, name());
-    DataStream<StreamEnvelop> events = new KafkaToMongoParser().parse(raw);
+    DataStream<StreamEnvelop> events = new StreamEnvelopParser(JOB_NAME).parse(raw);
 
     Duration gap =
         Duration.ofSeconds(Long.parseLong(ScopedConfig.getOrDefault(SESSION_GAP_SECONDS, "1800")));
