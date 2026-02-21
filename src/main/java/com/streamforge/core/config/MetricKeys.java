@@ -62,6 +62,8 @@ public final class MetricKeys {
   public static final String ASYNC_ENRICHER_TIMEOUT_COUNT = "async_enricher.timeout_count";
   public static final String ASYNC_ENRICHER_ERROR_COUNT = "async_enricher.error_count";
 
+  public static final String SESSION_CLOSED_COUNT = "session.closed_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }
