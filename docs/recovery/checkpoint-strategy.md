@@ -22,14 +22,20 @@ Flink provides two main mechanisms for state persistence and recovery:
 
 StreamForge pipelines persist the following state in checkpoints and savepoints:
 
-| State Type | Example | Stored In |
-|-----------|---------|-----------|
-| **Source offsets** | Kafka consumer offsets, MongoDB resume tokens | Flink source state |
-| **Operator state** | Deduplicator seen-keys, StatefulMerger previous values | `ValueState` / `MapState` |
-| **Sink state** | Kafka transactional IDs (exactly-once) | Flink sink state |
-| **Pattern state** | SessionAnalyzer active sessions, Materializer latest values | `ValueState` / `ListState` |
+| State Type | Example | Stored In | Checkpointed? |
+|-----------|---------|-----------|---------------|
+| **Kafka consumer offsets** | Consumer group offsets | Flink source state | **YES** |
+| **MongoDB resume tokens** | Change stream cursor position | — | **NOT STORED** (`snapshotState()` returns empty list) |
+| **Deduplicator** | Seen-key set | `ValueState<Boolean>` + TTL | YES |
+| **StatefulMerger** | Previous record per key | `ValueState` | YES |
+| **SessionAnalyzer** | Active sessions | Session window state | YES |
+| **Materializer** | Latest value per key | `ValueState` | YES |
+| **DynamicJoiner** | Left/right event buffers + sequence counter | `MapState` x2 + `ValueState` + TTL | YES |
+| **StaticJoiner** | Reference data | `BroadcastState` | YES |
+| **FlowDisruptionDetector** | Disruption flag + timer timestamp | `ValueState<Boolean>` + `ValueState<Long>` | YES |
+| **Kafka sink transactional IDs** | EXACTLY_ONCE transaction state | Flink sink state | YES |
 
-On recovery, all state is restored atomically — sources resume from their last committed offset/token, and operators continue from their last known state.
+On recovery, all checkpointed state is restored atomically — Kafka sources resume from their last committed offset, and operators continue from their last known state. **MongoDB CDC sources do NOT restore from checkpoint** — they reconnect from the current server position.
 
 ---
 
@@ -71,11 +77,10 @@ Use savepoints for controlled restart scenarios:
 
 ### Savepoint with Source Offsets
 
-When a savepoint is taken, source offsets (Kafka offsets, MongoDB resume tokens) are included. On restore:
+When a savepoint is taken, source offsets are included **where supported**:
 
-1. Kafka sources resume from the saved consumer offset.
-2. MongoDB Change Stream sources reopen the cursor from the saved resume token.
-3. No events are skipped or duplicated (assuming idempotent sinks or exactly-once mode).
+1. **Kafka sources** resume from the saved consumer offset. No events are skipped or duplicated (assuming idempotent sinks or exactly-once mode).
+2. **MongoDB Change Stream sources** — resume tokens are **NOT** saved in savepoints (`snapshotState()` returns empty list). On restore, the cursor reopens from the **current server position**. Events between the savepoint and restore **may be missed**.
 
 ---
 
@@ -83,8 +88,8 @@ When a savepoint is taken, source offsets (Kafka offsets, MongoDB resume tokens)
 
 | Scenario | Recovery Method | Details |
 |----------|----------------|---------|
-| **Node failure** | Latest **checkpoint** (automatic) | Flink restores all operator state and source offsets. |
-| **Redeploy / Upgrade** | **Savepoint** (manual) | Trigger savepoint → deploy new version → restore from savepoint. |
+| **Node failure** | Latest **checkpoint** (automatic) | Flink restores all operator state and Kafka offsets. MongoDB CDC resumes from current position. |
+| **Redeploy / Upgrade** | **Savepoint** (manual) | Trigger savepoint → deploy new version → restore from savepoint. MongoDB CDC events during downtime may be missed. |
 | **Data corruption** | **Savepoint** or **checkpoint** | Restore from a known-good snapshot. Replay from DLQ if needed. |
 | **Schema change** | **Savepoint** (manual) | Stop job → create savepoint → deploy with new schema → restore. |
 | **Parallelism change** | **Savepoint** (manual) | Savepoint redistributes keyed state across new parallelism. |
@@ -95,8 +100,11 @@ When a savepoint is taken, source offsets (Kafka offsets, MongoDB resume tokens)
 
 | Guarantee | Requirement |
 |-----------|-------------|
-| At-least-once | Default with checkpointing enabled. |
-| Exactly-once | Sinks must support idempotent writes or transactional commits (see TransactionalWriter pattern). |
+| At-least-once | Default with checkpointing enabled. Applies to Kafka sources. |
+| Exactly-once (Kafka sink) | Use `KafkaSinkBuilder.exactlyOnce(transactionalIdPrefix)`. Configures `enable.idempotence=true` and `transaction.timeout.ms=900000`. |
+| Idempotent writes (MongoDB sink) | `MongoSinkBuilder` uses `replaceOne` by `_id` — natural deduplication. |
+| Idempotent writes (ES sink) | `ElasticsearchSinkBuilder` indexes by `traceId` — natural deduplication. |
+| MongoDB CDC source | **At-most-once** — resume tokens are not checkpointed; events may be missed on recovery. |
 
 With at-least-once, duplicate events may occur after checkpoint recovery. Use the **Deduplicator** pattern to handle this at the stream level.
 
@@ -138,3 +146,11 @@ spec:
 - Periodically clean up old savepoints to manage storage costs.
 - Automate savepoint creation in CI/CD before deploying new versions.
 - Test savepoint restore in staging before production upgrades.
+
+---
+
+## 9. Known Gaps
+
+1. **MongoDB resume token gap.** `MongoChangeStreamSource.snapshotState()` returns `Collections.emptyList()`. Resume tokens are not included in checkpoints or savepoints. On any recovery (automatic or manual), the MongoDB CDC source reconnects from the current server position. Events occurring between failure and reconnection are lost. This is a fundamental limitation of the current `MongoChangeStreamSource` implementation.
+
+2. **No state migration tooling.** There is no built-in tooling for migrating operator state schemas across versions. State schema changes require compatible Flink state evolution or a fresh start with potential data loss from the MongoDB CDC source.

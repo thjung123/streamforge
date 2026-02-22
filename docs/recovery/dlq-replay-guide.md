@@ -1,60 +1,143 @@
 # DLQ Replay Guide
 
-This document defines the **DLQ (Dead Letter Queue) replay procedure** for StreamForge pipelines.
-It explains how failed events stored in DLQ topics are safely validated and reprocessed.
+This document describes the **DLQ (Dead Letter Queue)** implementation in StreamForge and the replay procedure for failed events.
+
+---
+
+> **Status**
+> - **DLQ publishing**: IMPLEMENTED — `DLQPublisher` routes failed events to Kafka DLQ topics across 9 publishing points.
+> - **Airflow replay DAG**: DESIGN DOCUMENT — not yet built. See [Planned Design](#6-planned-design-airflow-replay-dag) below.
+> - **Current workaround**: Manual replay via `kafka-console-consumer` / `kafka-console-producer` or custom scripts.
 
 ---
 
 ## 1. Purpose & Scope
 
-The **Dead Letter Queue (DLQ)** temporarily stores events that failed during parsing, transformation, or sink operations.
-It ensures data durability and allows manual reprocessing once the underlying issue has been fixed.
+The **Dead Letter Queue (DLQ)** stores events that failed during parsing, transformation, quality enforcement, or sink operations. It ensures data durability and allows reprocessing once the underlying issue has been fixed.
 
 This guide covers:
-- DLQ operational policy
-- Replay prerequisites
-- Airflow-based replay workflow
-- Post-replay verification and monitoring
+- Current DLQ implementation (what is built today)
+- DLQ event structure and error types
+- All publishing points
+- Manual replay procedure
+- Planned Airflow-based replay workflow (not yet implemented)
 
 ---
 
-## 2. DLQ Design & Policy
+## 2. Current Implementation
 
-- Each pipeline maintains its own **Kafka DLQ topic** (e.g., `stream.<pipeline>.dlq`).
+### DLQPublisher
+
+`DLQPublisher` (`com.streamforge.core.dlq.DLQPublisher`) is a thread-safe singleton that publishes failed events to a Kafka DLQ topic.
+
+- **Transport**: Standalone `KafkaProducer<String, String>` (not Flink's transactional sink).
+- **Topic**: Configured via `DLQ_TOPIC` (default: `stream-dlq`).
+- **Serialization**: `DlqEvent` → JSON via `JsonUtils.toJson()`.
+- **Delivery**: Async send with callback. Non-transactional — best-effort delivery.
+- **Metrics**: `dlq.published_count` on success, `dlq.failed_count` on failure.
+
+### DlqEvent Structure
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `errorType` | `String` | Error category (see table below) |
+| `errorMessage` | `String` | Exception message |
+| `source` | `String` | Originating operator name |
+| `timestamp` | `Instant` | Time of DLQ publish (`Instant.now()`) |
+| `rawEvent` | `String` | Original JSON payload (nullable) |
+| `stacktrace` | `String` | Full stack trace (nullable) |
+
+Created via `DlqEvent.of(errorType, errorMessage, source, rawEvent, cause)`.
+
+### Publishing Points
+
+| # | Class | Error Type | Trigger |
+|---|-------|------------|---------|
+| 1 | `StreamEnvelopParser` | `PARSING_ERROR` | JSON deserialization failure |
+| 2 | `MongoToKafkaParser` | `PARSING_ERROR` | CDC document parse failure |
+| 3 | `MongoToKafkaProcessor` | `PROCESSING_ERROR` | Transformation logic error |
+| 4 | `KafkaToMongoProcessor` | `PROCESSING_ERROR` | Transformation logic error |
+| 5 | `MongoChangeStreamSource` | `SOURCE_PARSING_ERROR` | Exception reading change stream event |
+| 6 | `MongoSinkBuilder` | `SINK_ERROR` | Exception writing to MongoDB |
+| 7 | `KafkaSinkBuilder` | `SINK_ERROR` | Exception in pre-sink metrics map function |
+| 8 | `ConstraintEnforcer` | `CONSTRAINT_VIOLATION` | Business rule validation failure |
+| 9 | `SchemaEnforcer` | `SCHEMA_VIOLATION` | Schema version mismatch |
+
+---
+
+## 3. Failure Categories
+
+| Error Type | Source | Description | Resolution |
+|-----------|--------|-------------|------------|
+| `SOURCE_PARSING_ERROR` | `MongoChangeStreamSource` | Failed to read a change stream event | Fix MongoDB configuration or schema, then replay |
+| `PARSING_ERROR` | `StreamEnvelopParser`, `MongoToKafkaParser` | Failed to deserialize or parse input | Fix schema or input format, redeploy, then replay |
+| `PROCESSING_ERROR` | `MongoToKafkaProcessor`, `KafkaToMongoProcessor` | Transformation or enrichment logic failed | Patch and redeploy pipeline, then replay |
+| `SCHEMA_VIOLATION` | `SchemaEnforcer` | Event schema version does not match expected version | Update schema enforcement rules or fix upstream producer |
+| `CONSTRAINT_VIOLATION` | `ConstraintEnforcer` | Business rule validation failed | Update constraint rules or fix upstream data |
+| `SINK_ERROR` | `MongoSinkBuilder`, `KafkaSinkBuilder` | Failed to write to target | Fix connection/configuration, then replay |
+
+---
+
+## 4. DLQ Policy
+
+- Each pipeline writes to a shared **Kafka DLQ topic** (configured via `DLQ_TOPIC`, default `stream-dlq`).
 - Events in DLQ are **not reprocessed automatically**.
 - Replay should only occur **after** the cause of failure has been identified and fixed.
 - Retention is typically **7–14 days** to allow safe recovery without backlog growth.
 
 ---
 
-## 3. Failure Categories
+## 5. Manual Replay (Current Workaround)
 
-| Stage | Error Type | Description | Resolution |
-|--------|-------------|--------------|-------------|
-| **Source** | `PARSING_ERROR` | Failed to deserialize or parse input | Fix schema or input format, redeploy, then replay |
-| **Processor** | `PROCESSING_ERROR` | Transformation or enrichment logic failed | Patch and redeploy pipeline, then replay |
-| **Sink** | `SINK_ERROR` | Failed to write to target (MongoDB, Kafka, etc.) | Fix configuration or connection, then replay |
+Since the automated replay DAG is not yet implemented, use this manual procedure:
 
----
-
-## 4. Replay Preconditions
-
-Before running a replay, ensure that:
+### Prerequisites
 
 1. The root cause has been identified and fixed (schema, code, sink config, etc.).
 2. DLQ messages have been inspected and validated.
 3. Downstream systems are healthy and can accept data.
 4. Monitoring and alerting are active to observe replay status.
-5. Replay range and batch size are clearly defined.
+
+### Procedure
+
+```bash
+# 1. Inspect DLQ messages
+kafka-console-consumer \
+  --bootstrap-server $KAFKA_BOOTSTRAP_SERVERS \
+  --topic stream-dlq \
+  --from-beginning \
+  --max-messages 10
+
+# 2. Extract rawEvent payloads from DLQ messages
+# (DLQ messages are JSON; extract the "rawEvent" field)
+kafka-console-consumer \
+  --bootstrap-server $KAFKA_BOOTSTRAP_SERVERS \
+  --topic stream-dlq \
+  --from-beginning | \
+  jq -r '.rawEvent' > replay-events.jsonl
+
+# 3. Replay extracted events to the source topic
+kafka-console-producer \
+  --bootstrap-server $KAFKA_BOOTSTRAP_SERVERS \
+  --topic <source-topic> < replay-events.jsonl
+
+# 4. Monitor pipeline for successful processing
+# Check DLQ for new failures, check sink for expected records
+```
+
+### Post-Replay Verification
+
+- Confirm all replayed records appear in the sink.
+- Check DLQ topic for new failures (indicates the fix was incomplete).
+- Monitor `dlq.published_count` metric — should not increase.
 
 ---
 
-## 5. Replay Architecture
+## 6. Planned Design: Airflow Replay DAG
 
-DLQ replay in production is handled through a **dedicated Airflow DAG** or **on-demand batch job**.
-This approach ensures safe reprocessing, observability, and operational control.
+> **NOT YET IMPLEMENTED** — The following describes a planned design for automated DLQ replay. It has not been built.
 
-### 5.1 Overview
+### 6.1 Overview
 ```
 DLQ Kafka Topic
 │
@@ -66,16 +149,14 @@ Replay DAG (Airflow)
 └── Monitor & Log Results
 ```
 
-### 5.2 Features
+### 6.2 Features
 
 - Schema and data validation before replay
 - Controlled batch replay (by partition or time window)
 - Isolation from streaming jobs to prevent backpressure
 - Logging of replay metadata (topic, offsets, batch size, timestamp)
 
----
-
-## 6. Operational Workflow
+### 6.3 Operational Workflow
 
 | Step | Phase | Description |
 |------|--------|-------------|
@@ -86,9 +167,7 @@ Replay DAG (Airflow)
 | **5. Monitor** | Track replay throughput, DLQ growth, and sink latency. |
 | **6. Verify & Cleanup** | Confirm all records processed; clean DLQ if resolved. |
 
----
-
-## 7. Replay DAG Example (Conceptual)
+### 6.4 Replay DAG Operators
 
 | Operator | Purpose | Notes |
 |-----------|----------|-------|
@@ -100,6 +179,10 @@ Replay DAG (Airflow)
 
 ## Summary
 
-DLQ replay is a **manual, controlled operation** designed for safe recovery.
-All replays should be performed after validation and monitoring setup,
-preferably through Airflow or batch workflows rather than direct Kafka commands.
+| Capability | Status |
+|-----------|--------|
+| DLQ publishing (`DLQPublisher`) | **Implemented** — 9 publishing points, 6 error types |
+| DLQ event structure (`DlqEvent`) | **Implemented** — 6 fields with static factory |
+| Manual replay | **Available** — via Kafka CLI tools |
+| Automated Airflow replay DAG | **Planned** — design documented, not yet built |
+| DLQ metrics | **Implemented** — `dlq.published_count`, `dlq.failed_count` |
