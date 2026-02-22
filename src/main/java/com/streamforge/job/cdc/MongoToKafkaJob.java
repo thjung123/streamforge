@@ -1,7 +1,7 @@
 package com.streamforge.job.cdc;
 
 import com.streamforge.connector.kafka.KafkaSinkBuilder;
-import com.streamforge.connector.mongo.MongoChangeStreamSource;
+import com.streamforge.connector.mongo.MultiCdcSourceBuilder;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
@@ -38,7 +38,7 @@ public class MongoToKafkaJob implements StreamJob {
   public StreamExecutionEnvironment buildPipeline(PipelineBuilder.SinkBuilder<StreamEnvelop> sink) {
     StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
     env.setParallelism(1);
-    PipelineBuilder.from(new MongoChangeStreamSource().build(env, name()))
+    PipelineBuilder.from(new MultiCdcSourceBuilder().build(env, name()))
         .parse(new MongoToKafkaParser())
         .apply(new FlowDisruptionDetector<>(StreamEnvelop::getSource, Duration.ofMinutes(5)))
         .apply(new FilterInterceptor<>(e -> !"unknown".equals(e.getOperation())))

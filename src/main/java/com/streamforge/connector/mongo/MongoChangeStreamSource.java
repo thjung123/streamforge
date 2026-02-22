@@ -23,6 +23,7 @@ import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,11 +31,41 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
 
   @Override
   public DataStream<Document> build(StreamExecutionEnvironment env, String jobName) {
+    return build(env, jobName, 0, 1);
+  }
+
+  public DataStream<Document> build(
+      StreamExecutionEnvironment env, String jobName, int splitIndex, int numSplits) {
+    String suffix = numSplits > 1 ? "-MongoSource-" + splitIndex : "-MongoSource";
     return env.fromSource(
-        new MongoChangeStreamFlink(), WatermarkStrategy.noWatermarks(), jobName + "-MongoSource");
+        new MongoChangeStreamFlink(splitIndex, numSplits),
+        WatermarkStrategy.noWatermarks(),
+        jobName + suffix);
+  }
+
+  static List<Bson> buildHashModPipeline(int splitIndex, int numSplits) {
+    if (numSplits <= 1) return Collections.emptyList();
+    String json =
+        """
+        {"$match":{"$expr":{"$eq":[{"$mod":[{"$abs":{"$toHashedIndexKey":"$documentKey._id"}},%d]},%d]}}}
+        """
+            .formatted(numSplits, splitIndex);
+    return Collections.singletonList(Document.parse(json));
   }
 
   public static class MongoChangeStreamFlink implements Source<Document, NoSplit, Void> {
+
+    private final int splitIndex;
+    private final int numSplits;
+
+    public MongoChangeStreamFlink() {
+      this(0, 1);
+    }
+
+    public MongoChangeStreamFlink(int splitIndex, int numSplits) {
+      this.splitIndex = splitIndex;
+      this.numSplits = numSplits;
+    }
 
     @Override
     public Boundedness getBoundedness() {
@@ -43,7 +74,7 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
 
     @Override
     public SourceReader<Document, NoSplit> createReader(SourceReaderContext ctx) {
-      return new MongoChangeStreamReader();
+      return new MongoChangeStreamReader(splitIndex, numSplits);
     }
 
     @Override
@@ -86,9 +117,21 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
   public static class MongoChangeStreamReader implements SourceReader<Document, NoSplit> {
     private static final Logger log = LoggerFactory.getLogger(MongoChangeStreamReader.class);
 
+    private final int splitIndex;
+    private final int numSplits;
+
     private MongoChangeStreamCursor<ChangeStreamDocument<Document>> cursor;
     private volatile boolean running = true;
     private MongoClient client;
+
+    public MongoChangeStreamReader() {
+      this(0, 1);
+    }
+
+    public MongoChangeStreamReader(int splitIndex, int numSplits) {
+      this.splitIndex = splitIndex;
+      this.numSplits = numSplits;
+    }
 
     @Override
     public void start() {
@@ -106,8 +149,14 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
         }
 
         MongoCollection<Document> collection = client.getDatabase(dbName).getCollection(collName);
-        cursor = collection.watch().cursor();
-        log.info("[MongoSource] Connected to {}.{} via {}", db, coll, uri);
+        List<Bson> pipeline = buildHashModPipeline(splitIndex, numSplits);
+        cursor = collection.watch(pipeline).cursor();
+        log.info(
+            "[MongoSource] Connected to {}.{} (split={}/{})",
+            dbName,
+            collName,
+            splitIndex,
+            numSplits);
       } catch (Exception e) {
         log.error("[MongoSource] Failed to start ChangeStream reader", e);
         throw new RuntimeException("Failed to start Mongo ChangeStream source", e);
@@ -201,8 +250,14 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
       String dbName = getOrDefault(MONGO_DB, MONGO_DB);
       String collName = getOrDefault(MONGO_COLLECTION, MONGO_COLLECTION);
       client = MongoClients.create(uri);
-      cursor = client.getDatabase(dbName).getCollection(collName).watch().cursor();
-      log.info("[MongoSource] Reconnected to MongoDB: {}.{}", dbName, collName);
+      List<Bson> pipeline = buildHashModPipeline(splitIndex, numSplits);
+      cursor = client.getDatabase(dbName).getCollection(collName).watch(pipeline).cursor();
+      log.info(
+          "[MongoSource] Reconnected to MongoDB: {}.{} (split={}/{})",
+          dbName,
+          collName,
+          splitIndex,
+          numSplits);
     }
 
     private void safeCloseCursor() {
