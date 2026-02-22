@@ -64,6 +64,10 @@ public final class MetricKeys {
 
   public static final String SESSION_CLOSED_COUNT = "session.closed_count";
 
+  public static final String MATERIALIZER_INSERT_COUNT = "materializer.insert_count";
+  public static final String MATERIALIZER_UPDATE_COUNT = "materializer.update_count";
+  public static final String MATERIALIZER_DELETE_COUNT = "materializer.delete_count";
+
   public static final String KAFKA = "kafka";
   public static final String MONGO = "mongo";
 }
