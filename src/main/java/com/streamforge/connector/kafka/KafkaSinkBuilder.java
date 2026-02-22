@@ -12,6 +12,7 @@ import com.streamforge.core.model.DlqEvent;
 import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
 import com.streamforge.core.util.JsonUtils;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.configuration.Configuration;
@@ -20,6 +21,7 @@ import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,37 +32,59 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<StreamEnvel
 
   private final DeliveryGuarantee guarantee;
   private final String transactionalIdPrefix;
+  private final boolean compaction;
 
   public KafkaSinkBuilder() {
-    this(DeliveryGuarantee.AT_LEAST_ONCE, null);
+    this(DeliveryGuarantee.AT_LEAST_ONCE, null, false);
   }
 
   public KafkaSinkBuilder(DeliveryGuarantee guarantee, String transactionalIdPrefix) {
+    this(guarantee, transactionalIdPrefix, false);
+  }
+
+  private KafkaSinkBuilder(
+      DeliveryGuarantee guarantee, String transactionalIdPrefix, boolean compaction) {
     this.guarantee = guarantee;
     this.transactionalIdPrefix = transactionalIdPrefix;
+    this.compaction = compaction;
   }
 
   public static KafkaSinkBuilder exactlyOnce(String transactionalIdPrefix) {
-    return new KafkaSinkBuilder(DeliveryGuarantee.EXACTLY_ONCE, transactionalIdPrefix);
+    return new KafkaSinkBuilder(DeliveryGuarantee.EXACTLY_ONCE, transactionalIdPrefix, false);
+  }
+
+  public static KafkaSinkBuilder compacted() {
+    return new KafkaSinkBuilder(DeliveryGuarantee.AT_LEAST_ONCE, null, true);
+  }
+
+  public static KafkaSinkBuilder compactedExactlyOnce(String transactionalIdPrefix) {
+    return new KafkaSinkBuilder(DeliveryGuarantee.EXACTLY_ONCE, transactionalIdPrefix, true);
   }
 
   @Override
   public DataStreamSink<StreamEnvelop> write(DataStream<StreamEnvelop> stream, String jobName) {
+    return write(stream, jobName, require(STREAM_TOPIC));
+  }
+
+  public DataStreamSink<StreamEnvelop> write(
+      DataStream<StreamEnvelop> stream, String jobName, String topic) {
     if (guarantee == DeliveryGuarantee.EXACTLY_ONCE) {
       CheckpointConfig.enableExactlyOnce(stream.getExecutionEnvironment());
     }
-    return stream.map(new MetricsMapFunction(jobName)).sinkTo(buildKafkaSink()).name(OPERATOR_NAME);
+    return stream
+        .map(new MetricsMapFunction(jobName))
+        .sinkTo(buildKafkaSink(topic))
+        .name(OPERATOR_NAME);
   }
 
-  private KafkaSink<StreamEnvelop> buildKafkaSink() {
+  private KafkaSink<StreamEnvelop> buildKafkaSink(String topic) {
+    KafkaRecordSerializationSchema<StreamEnvelop> serializer =
+        new KeyedSerializationSchema(topic, compaction);
+
     var builder =
         KafkaSink.<StreamEnvelop>builder()
             .setBootstrapServers(require(KAFKA_BOOTSTRAP_SERVERS))
-            .setRecordSerializer(
-                KafkaRecordSerializationSchema.<StreamEnvelop>builder()
-                    .setTopic(require(STREAM_TOPIC))
-                    .setValueSerializationSchema(envelop -> JsonUtils.toJson(envelop).getBytes())
-                    .build())
+            .setRecordSerializer(serializer)
             .setDeliveryGuarantee(guarantee)
             .setKafkaProducerConfig(producerConfig());
 
@@ -97,6 +121,39 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<StreamEnvel
 
   String getTransactionalIdPrefix() {
     return transactionalIdPrefix;
+  }
+
+  boolean isCompaction() {
+    return compaction;
+  }
+
+  static class KeyedSerializationSchema implements KafkaRecordSerializationSchema<StreamEnvelop> {
+
+    private final String topic;
+    private final boolean compaction;
+
+    KeyedSerializationSchema(String topic, boolean compaction) {
+      this.topic = topic;
+      this.compaction = compaction;
+    }
+
+    @Override
+    public ProducerRecord<byte[], byte[]> serialize(
+        StreamEnvelop envelop,
+        KafkaRecordSerializationSchema.KafkaSinkContext context,
+        Long timestamp) {
+      byte[] key =
+          envelop.getPrimaryKey() != null
+              ? envelop.getPrimaryKey().getBytes(StandardCharsets.UTF_8)
+              : null;
+
+      if (compaction && "DELETE".equalsIgnoreCase(envelop.getOperation())) {
+        return new ProducerRecord<>(topic, null, timestamp, key, (byte[]) null);
+      }
+
+      byte[] value = JsonUtils.toJson(envelop).getBytes(StandardCharsets.UTF_8);
+      return new ProducerRecord<>(topic, null, timestamp, key, value);
+    }
   }
 
   static class MetricsMapFunction extends RichMapFunction<StreamEnvelop, StreamEnvelop> {

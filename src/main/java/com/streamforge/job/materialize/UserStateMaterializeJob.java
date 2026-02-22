@@ -2,6 +2,7 @@ package com.streamforge.job.materialize;
 
 import static com.streamforge.connector.kafka.KafkaConfigKeys.*;
 
+import com.streamforge.connector.kafka.KafkaSinkBuilder;
 import com.streamforge.connector.kafka.KafkaSourceBuilder;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
@@ -15,9 +16,6 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
-import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
@@ -48,7 +46,7 @@ public class UserStateMaterializeJob implements StreamJob {
     DataStream<ChangelogEvent<StreamEnvelop>> changelog = buildMaterializer(ttl).apply(events);
     DataStream<StreamEnvelop> output = changelog.map(UserStateMaterializeJob::toEnvelop);
 
-    output.sinkTo(buildChangelogSink(changelogTopic)).name("ChangelogKafkaSink");
+    KafkaSinkBuilder.compacted().write(output, name(), changelogTopic);
 
     return env;
   }
@@ -58,18 +56,6 @@ public class UserStateMaterializeJob implements StreamJob {
         .keyExtractor(StreamEnvelop::getPrimaryKey)
         .ttl(ttl)
         .deletePredicate(e -> "DELETE".equalsIgnoreCase(e.getOperation()))
-        .build();
-  }
-
-  private KafkaSink<StreamEnvelop> buildChangelogSink(String topic) {
-    return KafkaSink.<StreamEnvelop>builder()
-        .setBootstrapServers(ScopedConfig.require(KAFKA_BOOTSTRAP_SERVERS))
-        .setRecordSerializer(
-            KafkaRecordSerializationSchema.<StreamEnvelop>builder()
-                .setTopic(topic)
-                .setValueSerializationSchema(envelop -> JsonUtils.toJson(envelop).getBytes())
-                .build())
-        .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
         .build();
   }
 
@@ -93,7 +79,7 @@ public class UserStateMaterializeJob implements StreamJob {
         .operation("CHANGELOG_" + event.type().name())
         .source("materializer")
         .payloadJson(JsonUtils.toJson(payload))
-        .primaryKey("_id")
+        .primaryKey(event.key())
         .eventTime(event.timestamp())
         .processedTime(Instant.now())
         .metadata(metadata)
