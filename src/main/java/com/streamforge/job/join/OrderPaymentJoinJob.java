@@ -7,8 +7,8 @@ import com.streamforge.connector.mongo.MongoSinkBuilder;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
+import com.streamforge.core.parser.StreamEnvelopParser;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.cdc.parser.KafkaToMongoParser;
 import com.streamforge.pattern.enrich.DynamicJoiner;
 import java.time.Duration;
 import java.util.HashMap;
@@ -38,12 +38,12 @@ public class OrderPaymentJoinJob implements StreamJob {
 
     ScopedConfig.require(STREAM_TOPIC);
     DataStream<String> ordersRaw = new KafkaSourceBuilder().build(env, name());
-    DataStream<StreamEnvelop> orders = new KafkaToMongoParser().parse(ordersRaw);
+    DataStream<StreamEnvelop> orders = new StreamEnvelopParser(JOB_NAME).parse(ordersRaw);
 
     String paymentTopic = ScopedConfig.require(PAYMENT_TOPIC);
     DataStream<String> paymentsRaw =
         new KafkaSourceBuilder().build(env, name() + "-payments", paymentTopic);
-    DataStream<StreamEnvelop> payments = new KafkaToMongoParser().parse(paymentsRaw);
+    DataStream<StreamEnvelop> payments = new StreamEnvelopParser(JOB_NAME).parse(paymentsRaw);
 
     Duration ttl =
         Duration.ofMinutes(Long.parseLong(ScopedConfig.getOrDefault(JOIN_TTL_MINUTES, "10")));

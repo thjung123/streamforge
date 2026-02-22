@@ -8,7 +8,9 @@ import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.model.StreamEnvelop;
+import java.nio.charset.StandardCharsets;
 import org.apache.flink.connector.base.DeliveryGuarantee;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -90,6 +92,147 @@ class KafkaSinkBuilderTest {
 
       assertThat(builder.getGuarantee()).isEqualTo(DeliveryGuarantee.EXACTLY_ONCE);
       assertThat(builder.getTransactionalIdPrefix()).isEqualTo("txn-custom");
+    }
+  }
+
+  @Nested
+  @DisplayName("Compaction configuration")
+  class CompactionConfigTest {
+
+    @Test
+    @DisplayName("should default to compaction disabled")
+    void defaultNoCompaction() {
+      var builder = new KafkaSinkBuilder();
+
+      assertThat(builder.isCompaction()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should enable compaction via factory method")
+    void compactedFactory() {
+      var builder = KafkaSinkBuilder.compacted();
+
+      assertThat(builder.isCompaction()).isTrue();
+      assertThat(builder.getGuarantee()).isEqualTo(DeliveryGuarantee.AT_LEAST_ONCE);
+    }
+
+    @Test
+    @DisplayName("should enable compaction with EXACTLY_ONCE via factory method")
+    void compactedExactlyOnceFactory() {
+      var builder = KafkaSinkBuilder.compactedExactlyOnce("txn-compact");
+
+      assertThat(builder.isCompaction()).isTrue();
+      assertThat(builder.getGuarantee()).isEqualTo(DeliveryGuarantee.EXACTLY_ONCE);
+      assertThat(builder.getTransactionalIdPrefix()).isEqualTo("txn-compact");
+    }
+
+    @Test
+    @DisplayName("should not enable compaction for exactlyOnce factory")
+    void exactlyOnceNoCompaction() {
+      var builder = KafkaSinkBuilder.exactlyOnce("txn-job");
+
+      assertThat(builder.isCompaction()).isFalse();
+    }
+  }
+
+  @Nested
+  @DisplayName("KeyedSerializationSchema")
+  class KeyedSerializationSchemaTest {
+
+    private static final String TOPIC = "test-topic";
+
+    @Test
+    @DisplayName("should always set key from primaryKey")
+    void alwaysSetsKey() {
+      var schema = new KafkaSinkBuilder.KeyedSerializationSchema(TOPIC, false);
+      StreamEnvelop envelop =
+          StreamEnvelop.builder()
+              .operation("INSERT")
+              .primaryKey("user-123")
+              .payloadJson("{\"name\":\"Alice\"}")
+              .build();
+
+      ProducerRecord<byte[], byte[]> record = schema.serialize(envelop, null, 1000L);
+
+      assertThat(record.topic()).isEqualTo(TOPIC);
+      assertThat(record.key()).isEqualTo("user-123".getBytes(StandardCharsets.UTF_8));
+      assertThat(record.value()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("should handle null primaryKey")
+    void nullPrimaryKey() {
+      var schema = new KafkaSinkBuilder.KeyedSerializationSchema(TOPIC, false);
+      StreamEnvelop envelop =
+          StreamEnvelop.builder().operation("INSERT").payloadJson("{\"id\":1}").build();
+
+      ProducerRecord<byte[], byte[]> record = schema.serialize(envelop, null, 1000L);
+
+      assertThat(record.key()).isNull();
+      assertThat(record.value()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("should set timestamp on produced record")
+    void setsTimestamp() {
+      var schema = new KafkaSinkBuilder.KeyedSerializationSchema(TOPIC, false);
+      StreamEnvelop envelop =
+          StreamEnvelop.builder().operation("UPDATE").primaryKey("key-1").payloadJson("{}").build();
+
+      ProducerRecord<byte[], byte[]> record = schema.serialize(envelop, null, 5000L);
+
+      assertThat(record.timestamp()).isEqualTo(5000L);
+    }
+
+    @Test
+    @DisplayName("should send tombstone (null value) on DELETE when compaction enabled")
+    void tombstoneOnDeleteWithCompaction() {
+      var schema = new KafkaSinkBuilder.KeyedSerializationSchema(TOPIC, true);
+      StreamEnvelop envelop =
+          StreamEnvelop.builder()
+              .operation("DELETE")
+              .primaryKey("user-123")
+              .payloadJson("{\"name\":\"Alice\"}")
+              .build();
+
+      ProducerRecord<byte[], byte[]> record = schema.serialize(envelop, null, 1000L);
+
+      assertThat(record.key()).isEqualTo("user-123".getBytes(StandardCharsets.UTF_8));
+      assertThat(record.value()).isNull();
+    }
+
+    @Test
+    @DisplayName("should handle case-insensitive DELETE with compaction")
+    void caseInsensitiveDeleteWithCompaction() {
+      var schema = new KafkaSinkBuilder.KeyedSerializationSchema(TOPIC, true);
+      StreamEnvelop envelop =
+          StreamEnvelop.builder()
+              .operation("delete")
+              .primaryKey("user-456")
+              .payloadJson("{}")
+              .build();
+
+      ProducerRecord<byte[], byte[]> record = schema.serialize(envelop, null, 2000L);
+
+      assertThat(record.key()).isEqualTo("user-456".getBytes(StandardCharsets.UTF_8));
+      assertThat(record.value()).isNull();
+    }
+
+    @Test
+    @DisplayName("should NOT send tombstone on DELETE when compaction disabled")
+    void noTombstoneWithoutCompaction() {
+      var schema = new KafkaSinkBuilder.KeyedSerializationSchema(TOPIC, false);
+      StreamEnvelop envelop =
+          StreamEnvelop.builder()
+              .operation("DELETE")
+              .primaryKey("user-123")
+              .payloadJson("{\"name\":\"Alice\"}")
+              .build();
+
+      ProducerRecord<byte[], byte[]> record = schema.serialize(envelop, null, 1000L);
+
+      assertThat(record.key()).isEqualTo("user-123".getBytes(StandardCharsets.UTF_8));
+      assertThat(record.value()).isNotNull();
     }
   }
 }

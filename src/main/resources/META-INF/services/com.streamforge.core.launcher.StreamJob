@@ -3,3 +3,4 @@ com.streamforge.job.cdc.KafkaToMongoJob
 com.streamforge.job.route.EventRouterJob
 com.streamforge.job.ingest.MergedIngestJob
 com.streamforge.job.join.OrderPaymentJoinJob
+com.streamforge.job.session.UserSessionAnalysisJob

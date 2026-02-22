@@ -1,4 +1,4 @@
-package com.streamforge.job.cdc.parser;
+package com.streamforge.core.parser;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,7 +11,6 @@ import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.model.DlqEvent;
 import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.job.cdc.KafkaToMongoJob;
 import java.time.Instant;
 import java.util.Objects;
 import org.apache.flink.api.common.functions.RichMapFunction;
@@ -20,17 +19,25 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class KafkaToMongoParser implements PipelineBuilder.ParserFunction<String, StreamEnvelop> {
+public class StreamEnvelopParser implements PipelineBuilder.ParserFunction<String, StreamEnvelop> {
 
-  private static final Logger log = LoggerFactory.getLogger(KafkaToMongoParser.class);
+  private static final Logger log = LoggerFactory.getLogger(StreamEnvelopParser.class);
+  private static final String PARSER_NAME = "StreamEnvelopParser";
   private static final ObjectMapper MAPPER =
       new ObjectMapper()
           .registerModule(new JavaTimeModule())
           .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
           .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
+  private final String jobName;
+
+  public StreamEnvelopParser(String jobName) {
+    this.jobName = jobName;
+  }
+
   @Override
   public DataStream<StreamEnvelop> parse(DataStream<String> input) {
+    String jn = this.jobName;
     return input
         .filter(json -> json != null && json.trim().startsWith("{") && json.trim().endsWith("}"))
         .map(
@@ -39,11 +46,8 @@ public class KafkaToMongoParser implements PipelineBuilder.ParserFunction<String
 
               @Override
               public void open(Configuration parameters) {
-                metrics =
-                    new Metrics(
-                        getRuntimeContext(), KafkaToMongoJob.JOB_NAME, KafkaToMongoJob.PARSER_NAME);
-                DLQPublisher.getInstance()
-                    .initMetrics(getRuntimeContext(), KafkaToMongoJob.JOB_NAME);
+                metrics = new Metrics(getRuntimeContext(), jn, PARSER_NAME);
+                DLQPublisher.getInstance().initMetrics(getRuntimeContext(), jn);
               }
 
               @Override
@@ -56,19 +60,14 @@ public class KafkaToMongoParser implements PipelineBuilder.ParserFunction<String
                   metrics.inc(MetricKeys.PARSER_ERROR_COUNT);
                   log.warn("Failed to parse JSON: {}", json, e);
                   DlqEvent dlqEvent =
-                      DlqEvent.of(
-                          ErrorCodes.PARSING_ERROR,
-                          e.getMessage(),
-                          KafkaToMongoJob.PARSER_NAME,
-                          json,
-                          e);
+                      DlqEvent.of(ErrorCodes.PARSING_ERROR, e.getMessage(), PARSER_NAME, json, e);
                   DLQPublisher.getInstance().publish(dlqEvent);
                   return null;
                 }
               }
             })
         .filter(Objects::nonNull)
-        .name(KafkaToMongoJob.PARSER_NAME);
+        .name(PARSER_NAME);
   }
 
   static StreamEnvelop parseJson(String json) throws Exception {

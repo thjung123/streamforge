@@ -6,7 +6,7 @@ import com.streamforge.connector.mongo.MongoSinkBuilder;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
-import com.streamforge.job.cdc.parser.KafkaToMongoParser;
+import com.streamforge.core.parser.StreamEnvelopParser;
 import com.streamforge.pattern.split.ParallelSplitter;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -27,7 +27,7 @@ public class EventRouterJob implements StreamJob {
     env.setParallelism(1);
 
     DataStream<String> source = new KafkaSourceBuilder().build(env, name());
-    DataStream<StreamEnvelop> parsed = new KafkaToMongoParser().parse(source);
+    DataStream<StreamEnvelop> parsed = new StreamEnvelopParser(JOB_NAME).parse(source);
 
     var splitter =
         ParallelSplitter.builder(TypeInformation.of(StreamEnvelop.class))
