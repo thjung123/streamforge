@@ -7,7 +7,7 @@
 ## TL;DR
 
 - Composable streaming framework that turns Flink pipelines into **chains of reusable pattern blocks**
-- **17 patterns** across 5 categories: data integrity, enrichment, flow control, observability, stateful processing
+- **15 patterns** across 5 categories: data integrity, enrichment, flow control, observability, stateful processing
 - Production-ready jobs covering CDC sync, stream joins, materialized views, event routing, session analytics
 - Pluggable connectors (Kafka, MongoDB, Elasticsearch) with configurable delivery guarantees
 
@@ -48,7 +48,7 @@ PipelineBuilder
 
 ### Real Example — MongoToKafkaJob
 
-This CDC pipeline chains 8 patterns to go from MongoDB change streams to Kafka with exactly-once delivery:
+This CDC pipeline chains 8 patterns to go from MongoDB change streams to Kafka:
 
 ```java
 PipelineBuilder
@@ -63,10 +63,12 @@ PipelineBuilder
     .apply(new OnlineObserver<>(name()))                     // Throughput + health metrics
     .apply(new MetadataDecorator<>())                        // Inject traceId + timestamps
     .process(new MongoToKafkaProcessor())                    // Final transformation
-    .to(KafkaSinkBuilder.exactlyOnce("txn-MongoToKafka"), name());
+    .to(new KafkaSinkBuilder(), name());   // at-least-once (default); EO via DELIVERY_MODE=exactly_once
 ```
 
-**Why this composition matters:** each pattern handles one concern. Removing `SchemaEnforcer` doesn't break dedup. Adding `LateDataDetector` doesn't require touching existing logic. The pipeline reads like a specification.
+**Delivery semantics:** CDC defaults to at-least-once with idempotent sinks and the `Deduplicator` (effectively-once). Set `DELIVERY_MODE=exactly_once` for transactional Kafka EO; the same flag also switches consumers to `read_committed`.
+
+**Why this composition matters:** each pattern handles one concern. Removing `SchemaEnforcer` doesn't break dedup. Adding `LatencyDetector` doesn't require touching existing logic. The pipeline reads like a specification.
 
 ### Core Abstractions
 
@@ -81,21 +83,21 @@ PipelineBuilder
 ```
 com.streamforge/
 ├── core/          Framework engine (PipelineBuilder, ScopedConfig, DLQ, metrics)
-├── pattern/       17 reusable pattern blocks
+├── pattern/       15 reusable pattern blocks
 ├── connector/     Source/Sink adapters (Kafka, MongoDB, Elasticsearch)
 └── job/           7 pipeline definitions = pattern compositions
 ```
 
 ---
 
-## Pattern Catalog (17 patterns)
+## Pattern Catalog (15 patterns)
 
 ### Data Integrity
 
 | Pattern | What It Does | State | Key Design Decision |
 |---------|-------------|-------|---------------------|
 | **Deduplicator** | Drops duplicates by key within TTL window | `ValueState<Boolean>` + TTL | TTL-based eviction avoids unbounded state growth |
-| **SchemaEnforcer** | Validates schema version; routes violations to DLQ | Stateless | Fail-fast with DLQ fallback — bad data never reaches the sink |
+| **SchemaEnforcer** | Presence-checks required fields against declared versions; routes misses to DLQ | Stateless | A lightweight gate for a schema-flexible CDC stream — real compatibility enforcement (Avro/Protobuf via a schema registry) belongs at the typed-topic publish boundary, not on the raw CDC envelope |
 | **ConstraintEnforcer** | Validates business rules via pluggable `ConstraintRule<T>` | Stateless | Rule interface (`NotNull`, `Range`, `Format`) for extensibility |
 | **StatefulMerger** | Emits only changed fields by diffing against previous record | `ValueState` (hash) | Hash comparison, not deep-equals — O(1) per event |
 
@@ -103,7 +105,6 @@ com.streamforge/
 
 | Pattern | What It Does | State | Key Design Decision |
 |---------|-------------|-------|---------------------|
-| **AsyncEnricher** | Async external lookups (Redis, HTTP) | Async I/O | Flink's `AsyncDataStream` for non-blocking enrichment |
 | **DynamicJoiner** | Two-stream keyed join with configurable TTL | `MapState` x2 + TTL | Supports INNER/LEFT/RIGHT/FULL_OUTER join types |
 | **StaticJoiner** | Broadcast join with slowly-changing reference data | `BroadcastState` | Broadcast pattern — reference data replicated to all operators |
 
@@ -113,14 +114,13 @@ com.streamforge/
 |---------|-------------|-------|---------------------|
 | **FilterInterceptor** | Predicate-based filtering | Stateless | Composable predicates, not hardcoded conditions |
 | **ParallelSplitter** | Routes events to named side outputs | Stateless | Flink `OutputTag` for zero-copy fan-out |
-| **OrderedFanIn** | Merges streams by event time with max drift bound | Stateless | Bounded out-of-orderness prevents unbounded buffering |
+| **WatermarkAlignedFanIn** | Unions sources, assigning each a bounded-out-of-orderness watermark first | Stateless | Aligns watermarks across sources so downstream sees a coherent one; does not reorder records |
 
 ### Observability
 
 | Pattern | What It Does | State | Key Design Decision |
 |---------|-------------|-------|---------------------|
 | **FlowDisruptionDetector** | Detects stream silence; emits disruption/recovery alerts | `ValueState` x2 + timers | Processing-time timers — works even when event flow stops |
-| **LateDataDetector** | Tags late-arriving events relative to watermark | Stateless | Detection only, not correction — downstream decides policy |
 | **LatencyDetector** | Measures end-to-end latency; alerts on threshold breach | Stateless | `processingTime - eventTime` as the latency signal |
 | **MetadataDecorator** | Injects traceId, timestamps, job metadata | Stateless | Enables distributed tracing across pipeline stages |
 | **OnlineObserver** | Emits throughput and health metrics via custom predicates | Stateless | Pluggable `QualityCheck` — define what "healthy" means per job |
@@ -140,9 +140,9 @@ Each job is a **composition of patterns** — the job class itself is typically 
 
 | Job | What It Does | Patterns Used | Source → Sink |
 |-----|-------------|---------------|---------------|
-| **MongoToKafkaJob** | CDC sync from MongoDB to Kafka | 8 patterns (dedup, schema, merge, observability) | MongoDB CDC → Kafka (exactly-once) |
+| **MongoToKafkaJob** | CDC sync from MongoDB to Kafka | 8 patterns (dedup, schema, merge, observability) | MongoDB CDC → Kafka (at-least-once + dedup; EO opt-in) |
 | **KafkaToMongoJob** | Reverse CDC with optional reference enrichment | StaticJoiner x2 (optional) | Kafka → MongoDB (idempotent upsert) |
-| **MergedIngestJob** | Merge two event streams by event time | OrderedFanIn (5s max drift) | Kafka x2 → MongoDB |
+| **MergedIngestJob** | Merge two event streams by event time | WatermarkAlignedFanIn (5s max drift) | Kafka x2 → MongoDB |
 | **OrderPaymentJoinJob** | Join orders with payments within time window | DynamicJoiner (10min TTL, LEFT join) | Kafka x2 → MongoDB |
 | **UserStateMaterializeJob** | Maintain latest user state as changelog | Materializer | Kafka → Kafka (compacted) |
 | **EventRouterJob** | Route events to different sinks by type | ParallelSplitter | Kafka → Elasticsearch + MongoDB |
@@ -159,7 +159,7 @@ Each job is a **composition of patterns** — the job class itself is typically 
 | **KafkaSourceBuilder** | Unbounded | Flink-managed offsets; group `"stream-group"` |
 | **MongoSourceBuilder** | Bounded | Batch reads from MongoDB |
 | **MongoChangeStreamSource** | Unbounded | Custom CDC via change streams; auto-reconnect on failure |
-| **MultiCdcSourceBuilder** | Unbounded | N parallel CDC instances with hash-mod key split (default N=4) |
+| **MultiCdcSourceBuilder** | Unbounded | N change streams with a server-side hash-mod `$match` split, parallelizing downstream processing (default N=4). Each stream still tails the full oplog, so this scales consumer parallelism, not source read load — true source scaling needs a sharded cluster. |
 
 ### Sinks
 
@@ -179,18 +179,20 @@ Failed events are routed to a Kafka DLQ topic with full context:
 
 ```json
 {
-  "errorCode": "SCHEMA_VIOLATION",
+  "errorType": "SCHEMA_VIOLATION",
   "errorMessage": "Expected schema v2, got v1",
-  "sourceOperator": "SchemaEnforcer",
-  "originalPayload": "{ ... }",
-  "stackTrace": "...",
-  "timestamp": 1700000000000
+  "source": "SchemaEnforcer",
+  "timestamp": "2026-07-04T12:00:00Z",
+  "rawEvent": "{ ... }",
+  "stacktrace": "..."
 }
 ```
 
 Error classification: `PARSING_ERROR`, `PROCESSING_ERROR`, `SINK_ERROR`, `CONSTRAINT_VIOLATION`, `SCHEMA_VIOLATION`
 
-DLQ itself is async fire-and-forget — DLQ failures don't block the pipeline. Sink-level delivery guarantees are documented in [Connectors](#sinks).
+DLQ publishing is async and non-blocking, so a slow DLQ broker never stalls checkpoints or the main stream. The producer uses `acks=all` + idempotence, so dead-letters are durable once acked (at-least-once); send failures are logged, not blocking. Sink-level delivery guarantees are documented in [Connectors](#sinks).
+
+For per-layer recovery, checkpoint/savepoint strategy, and DLQ replay, see the recovery docs: [fault-tolerance](docs/recovery/fault-tolerance.md), [checkpoint-strategy](docs/recovery/checkpoint-strategy.md), [dlq-replay-guide](docs/recovery/dlq-replay-guide.md).
 
 ---
 
@@ -229,6 +231,8 @@ Each job activates its scoped config at startup via `ScopedConfig.activateJob(na
 ./gradlew integrationTest     # Integration tests (requires Docker)
 ```
 
+A pre-commit hook (`.githooks/pre-commit`) runs `spotlessCheck` plus the tests for staged files. Enable it once per clone: `git config core.hooksPath .githooks`.
+
 ---
 
 ## Extension Points
@@ -249,7 +253,6 @@ Each job activates its scoped config at startup via `ScopedConfig.activateJob(na
 |---|---|
 | **Runtime** | Java 17, Apache Flink 1.20.0 |
 | **Connectors** | flink-connector-kafka 3.3.0, flink-connector-mongodb 1.2.0, flink-connector-elasticsearch7 3.1.0 |
-| **External** | Redis (Lettuce / Jedis) |
 | **Testing** | JUnit 5, Mockito, Testcontainers |
 | **Code Quality** | Error Prone, Spotless (Google Java Format) |
 
@@ -258,15 +261,11 @@ Each job activates its scoped config at startup via `ScopedConfig.activateJob(na
 ## Getting Started
 
 ```bash
-# Local infrastructure
-docker-compose up -d
+# infra: Kafka + MongoDB (rs0) + Elasticsearch + topics
+docker compose up -d
 
-# Build
-./gradlew jar
-
-# Run a job
-java -cp build/libs/streamforge.jar com.streamforge.job.cdc.MongoToKafkaJob
-
-# Or submit to Flink cluster
-flink run -c com.streamforge.job.cdc.MongoToKafkaJob streamforge.jar
+# build the jar and run a job (no arg lists jobs)
+./scripts/run.sh MongoToKafka
 ```
+
+Config lives in `streamforge.json` (`common` + per-job sections); copy `.env.example` to `.env` to override locally. To run on a standalone Flink cluster instead, submit the jar with `flink run -c <JobClass> build/libs/streamforge.jar`.
