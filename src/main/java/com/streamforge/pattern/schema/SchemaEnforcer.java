@@ -64,30 +64,43 @@ public class SchemaEnforcer<T> implements PipelineBuilder.StreamPattern<T> {
 
     @Override
     public void processElement(T value, Context ctx, Collector<T> out) {
-      Map<String, Object> payload = payloadExtractor.extract(value);
-      List<String> allViolations = new ArrayList<>();
+      try {
+        Map<String, Object> payload = payloadExtractor.extract(value);
+        List<String> allViolations = new ArrayList<>();
 
-      for (int i = versions.size() - 1; i >= 0; i--) {
-        List<String> violations = versions.get(i).validate(payload);
-        if (violations.isEmpty()) {
-          metrics.inc(MetricKeys.SCHEMA_PASS_COUNT);
-          out.collect(value);
-          return;
+        for (int i = versions.size() - 1; i >= 0; i--) {
+          List<String> violations = versions.get(i).validate(payload);
+          if (violations.isEmpty()) {
+            metrics.inc(MetricKeys.SCHEMA_PASS_COUNT);
+            out.collect(value);
+            return;
+          }
+          allViolations.add("[v" + (i + 1) + "] " + String.join(", ", violations));
         }
-        allViolations.add("[v" + (i + 1) + "] " + String.join(", ", violations));
+
+        metrics.inc(MetricKeys.SCHEMA_VIOLATION_COUNT);
+        log.warn("[SchemaEnforcer] Dropped record with violations: {}", allViolations);
+
+        DlqEvent dlqEvent =
+            DlqEvent.of(
+                ErrorCodes.SCHEMA_VIOLATION,
+                String.join("; ", allViolations),
+                operatorName,
+                JsonUtils.toJson(value),
+                null);
+        DLQPublisher.getInstance().publish(dlqEvent);
+      } catch (Exception e) {
+        metrics.inc(MetricKeys.SCHEMA_VIOLATION_COUNT);
+        log.error("[SchemaEnforcer] Validation failed, routing to DLQ", e);
+        DLQPublisher.getInstance()
+            .publish(
+                DlqEvent.of(
+                    ErrorCodes.SCHEMA_VIOLATION,
+                    "validation error: " + e.getMessage(),
+                    operatorName,
+                    String.valueOf(value),
+                    e));
       }
-
-      metrics.inc(MetricKeys.SCHEMA_VIOLATION_COUNT);
-      log.warn("[SchemaEnforcer] Dropped record with violations: {}", allViolations);
-
-      DlqEvent dlqEvent =
-          DlqEvent.of(
-              ErrorCodes.SCHEMA_VIOLATION,
-              String.join("; ", allViolations),
-              operatorName,
-              JsonUtils.toJson(value),
-              null);
-      DLQPublisher.getInstance().publish(dlqEvent);
     }
   }
 }

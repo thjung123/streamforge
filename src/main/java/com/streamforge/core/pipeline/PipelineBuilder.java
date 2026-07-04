@@ -63,10 +63,7 @@ public class PipelineBuilder<T> {
     DataStream<T> build(StreamExecutionEnvironment env, String jobName);
   }
 
-  /**
-   * Common interface for all stream patterns. Accepts a DataStream and returns a transformed
-   * DataStream.
-   */
+  /** Common interface for all stream patterns. */
   public interface StreamPattern<T> {
     DataStream<T> apply(DataStream<T> stream);
 
@@ -75,10 +72,7 @@ public class PipelineBuilder<T> {
     }
   }
 
-  /**
-   * Interface for two-stream join patterns. Joins a main stream with a reference stream and returns
-   * the enriched main stream.
-   */
+  /** Two-stream join pattern: enriches a main stream with a reference stream. */
   public interface JoinPattern<T, R> {
     DataStream<T> join(DataStream<T> mainStream, DataStream<R> referenceStream);
   }

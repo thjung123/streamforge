@@ -67,7 +67,6 @@ class MultiCdcSourceTest {
     void defaultConstructorUsesNoFilter() {
       MongoChangeStreamSource.MongoChangeStreamFlink flink =
           new MongoChangeStreamSource.MongoChangeStreamFlink();
-      // should not throw — verifies construction with default (0, 1)
       assertThat(flink.getBoundedness())
           .isEqualTo(org.apache.flink.api.connector.source.Boundedness.CONTINUOUS_UNBOUNDED);
     }

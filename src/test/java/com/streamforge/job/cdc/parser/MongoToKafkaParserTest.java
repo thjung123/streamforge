@@ -3,8 +3,10 @@ package com.streamforge.job.cdc.parser;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.streamforge.core.model.StreamEnvelop;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.junit.jupiter.api.Test;
 
@@ -54,5 +56,21 @@ class MongoToKafkaParserTest {
     assertThat(result.getOperation()).isEqualTo("delete");
     assertThat(result.getPayloadAsMap()).containsEntry("_id", 7);
     assertThat(result.getPrimaryKey()).isEqualTo("7");
+  }
+
+  @Test
+  void eventTimeIsDerivedDeterministicallyFromClusterTime() {
+    BsonTimestamp clusterTime = new BsonTimestamp(1_700_000_000, 5);
+    Document doc =
+        new Document("op", "insert")
+            .append("source", "users")
+            .append("fullDocument", Map.of("_id", 1, "name", "Alice"))
+            .append("eventTime", clusterTime);
+
+    StreamEnvelop first = MongoToKafkaParser.from(doc);
+    StreamEnvelop second = MongoToKafkaParser.from(doc);
+
+    assertThat(first.getEventTime()).isEqualTo(Instant.ofEpochSecond(1_700_000_000, 5));
+    assertThat(first.getEventTime()).isEqualTo(second.getEventTime());
   }
 }

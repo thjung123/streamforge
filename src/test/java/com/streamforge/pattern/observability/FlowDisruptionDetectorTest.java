@@ -40,53 +40,47 @@ class FlowDisruptionDetectorTest {
   }
 
   @Test
-  @DisplayName("should emit disruption alert after timeout")
-  void disruptionAlert() throws Exception {
+  @DisplayName("should keep a single inactivity timer, resetting it on each event")
+  void resetsTimerPerElement() throws Exception {
     try (var harness = createHarness()) {
       harness.processElement(new StreamRecord<>("a", 1L));
-
-      harness.setProcessingTime(harness.getProcessingTime() + TIMEOUT.toMillis() + 1);
-
-      var alerts = harness.getSideOutput(FlowDisruptionDetector.ALERT_TAG);
-      assertThat(alerts).hasSize(1);
-      assertThat(alerts.poll().getValue()).contains("No events for");
-    }
-  }
-
-  @Test
-  @DisplayName("should not emit alert if events keep arriving")
-  void noAlertWhenActive() throws Exception {
-    try (var harness = createHarness()) {
-      harness.processElement(new StreamRecord<>("a", 1L));
+      assertThat(harness.numProcessingTimeTimers()).isEqualTo(1);
 
       harness.setProcessingTime(harness.getProcessingTime() + 5_000L);
       harness.processElement(new StreamRecord<>("b", 2L));
 
-      harness.setProcessingTime(harness.getProcessingTime() + 5_000L);
-      harness.processElement(new StreamRecord<>("c", 3L));
-
-      var alerts = harness.getSideOutput(FlowDisruptionDetector.ALERT_TAG);
-      assertThat(alerts).isNullOrEmpty();
+      // old timer deleted, new one registered — still exactly one
+      assertThat(harness.numProcessingTimeTimers()).isEqualTo(1);
     }
   }
 
   @Test
-  @DisplayName("should emit recovery alert when events resume after disruption")
-  void recoveryAlert() throws Exception {
+  @DisplayName("should fire and clear the timer after the inactivity timeout")
+  void firesTimerAfterTimeout() throws Exception {
     try (var harness = createHarness()) {
       harness.processElement(new StreamRecord<>("a", 1L));
+      assertThat(harness.numProcessingTimeTimers()).isEqualTo(1);
 
       harness.setProcessingTime(harness.getProcessingTime() + TIMEOUT.toMillis() + 1);
 
-      var disruptionAlerts = harness.getSideOutput(FlowDisruptionDetector.ALERT_TAG);
-      assertThat(disruptionAlerts).hasSize(1);
-      disruptionAlerts.clear();
+      assertThat(harness.numProcessingTimeTimers()).isZero();
+    }
+  }
+
+  @Test
+  @DisplayName("should re-arm the timer when events resume after a disruption")
+  void reArmsAfterDisruption() throws Exception {
+    try (var harness = createHarness()) {
+      harness.processElement(new StreamRecord<>("a", 1L));
+      harness.setProcessingTime(harness.getProcessingTime() + TIMEOUT.toMillis() + 1);
+      assertThat(harness.numProcessingTimeTimers()).isZero();
 
       harness.processElement(new StreamRecord<>("b", 2L));
+      assertThat(harness.numProcessingTimeTimers()).isEqualTo(1);
 
-      var recoveryAlerts = harness.getSideOutput(FlowDisruptionDetector.ALERT_TAG);
-      assertThat(recoveryAlerts).hasSize(1);
-      assertThat(recoveryAlerts.poll().getValue()).contains("recovered");
+      List<String> output =
+          harness.extractOutputStreamRecords().stream().map(r -> (String) r.getValue()).toList();
+      assertThat(output).containsExactly("a", "b");
     }
   }
 }

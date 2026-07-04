@@ -182,12 +182,12 @@ class SchemaEnforcerTest {
         try (var harness = new OneInputStreamOperatorTestHarness<>(operator)) {
           harness.open();
 
-          // v1 format (no email) — should pass against v1
+          // v1 format (no email), passes against v1
           harness.processElement(
               new StreamRecord<>(
                   StreamEnvelop.of("INSERT", "test", Map.of("_id", 1, "name", "Alice")), 1L));
 
-          // v2 format (with email) — should pass against v2
+          // v2 format (with email), passes against v2
           harness.processElement(
               new StreamRecord<>(
                   StreamEnvelop.of(

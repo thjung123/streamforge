@@ -32,12 +32,20 @@ public class KafkaSourceBuilder implements PipelineBuilder.SourceBuilder<String>
             .setTopics(topic)
             .setGroupId("stream-group")
             .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.LATEST))
+            .setProperty("isolation.level", isolationLevel())
             .setValueOnlyDeserializer(new SimpleStringSchema())
             .build();
 
     return env.fromSource(source, WatermarkStrategy.noWatermarks(), jobName + "-" + OPERATOR_NAME)
         .map(new MetricCountingMap(jobName))
         .name(OPERATOR_NAME);
+  }
+
+  static String isolationLevel() {
+    return DELIVERY_EXACTLY_ONCE.equalsIgnoreCase(
+            getGlobalOrDefault(DELIVERY_MODE, DELIVERY_AT_LEAST_ONCE))
+        ? "read_committed"
+        : "read_uncommitted";
   }
 
   static class MetricCountingMap extends RichMapFunction<String, String> {

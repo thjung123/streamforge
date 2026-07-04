@@ -35,8 +35,6 @@ public final class MetricKeys {
 
   public static final String OBSERVER_TOTAL_COUNT = "observer.total_events";
 
-  public static final String LATE_EVENT_COUNT = "late.event_count";
-
   public static final String DECORATOR_EVENT_COUNT = "decorator.event_count";
 
   public static final String MERGER_PASS_COUNT = "merger.pass_count";
@@ -57,10 +55,6 @@ public final class MetricKeys {
   public static final String DYNAMIC_JOINER_LEFT_PASS_COUNT = "dynamic_joiner.left_pass_count";
   public static final String DYNAMIC_JOINER_RIGHT_PASS_COUNT = "dynamic_joiner.right_pass_count";
   public static final String DYNAMIC_JOINER_EXPIRE_COUNT = "dynamic_joiner.expire_count";
-
-  public static final String ASYNC_ENRICHER_SUCCESS_COUNT = "async_enricher.success_count";
-  public static final String ASYNC_ENRICHER_TIMEOUT_COUNT = "async_enricher.timeout_count";
-  public static final String ASYNC_ENRICHER_ERROR_COUNT = "async_enricher.error_count";
 
   public static final String SESSION_CLOSED_COUNT = "session.closed_count";
 

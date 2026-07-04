@@ -3,19 +3,10 @@ package com.streamforge.job.cdc;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.streamforge.core.model.StreamEnvelop;
-import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.pattern.dedup.Deduplicator;
-import com.streamforge.pattern.filter.FilterInterceptor;
-import com.streamforge.pattern.merge.StatefulMerger;
-import com.streamforge.pattern.observability.*;
-import com.streamforge.pattern.schema.SchemaEnforcer;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -38,38 +29,8 @@ class MongoToKafkaJobTest {
         .build();
   }
 
-  /**
-   * Replicates the MongoToKafkaJob pipeline chain using PipelineBuilder, starting from an
-   * already-parsed StreamEnvelop stream (skipping MongoChangeStreamSource + parse).
-   */
   private DataStream<StreamEnvelop> buildTestChain(DataStream<StreamEnvelop> input) {
-    return PipelineBuilder.from(input)
-        .parse(stream -> stream) // identity — source is already parsed
-        .apply(new FlowDisruptionDetector<>(StreamEnvelop::getSource, Duration.ofMinutes(5)))
-        .apply(new FilterInterceptor<>(e -> !"unknown".equals(e.getOperation())))
-        .apply(
-            new Deduplicator<>(
-                e -> e.getPrimaryKey() + ":" + e.getEventTime(), Duration.ofMinutes(10)))
-        .apply(
-            new StatefulMerger<>(
-                StreamEnvelop::getPrimaryKey,
-                e -> {
-                  Map<String, Object> map = new HashMap<>();
-                  map.put("__op", e.getOperation());
-                  Map<String, Object> payload = e.getPayloadAsMap();
-                  if (payload != null) map.putAll(payload);
-                  return map;
-                },
-                Set.of("updatedAt", "modifiedAt")))
-        .apply(new SchemaEnforcer<>(StreamEnvelop::getPayloadAsMap, MongoToKafkaSchema.VERSIONS))
-        .apply(new LatencyDetector<>(StreamEnvelop::getEventTime, Duration.ofSeconds(30)))
-        .apply(
-            new OnlineObserver<>(
-                QualityCheck.of("null_payloads", e -> e.getPayloadJson() == null),
-                QualityCheck.of("null_keys", e -> e.getPrimaryKey() == null)))
-        .apply(new MetadataDecorator<>(StreamEnvelop::getMetadata, "pre-sink"))
-        .process(new com.streamforge.job.cdc.processor.MongoToKafkaProcessor())
-        .getStream();
+    return new MongoToKafkaJob().buildChain(input);
   }
 
   @Test

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.streamforge.core.BaseIntegrationTest;
 import com.streamforge.core.model.StreamEnvelop;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -53,6 +54,22 @@ public class KafkaToMongoIntegrationTest extends BaseIntegrationTest {
     Document deleted = waitUntilDeleted(1, 10);
     printAllDocs();
     assertThat(deleted).isNull();
+  }
+
+  @Test
+  void malformedEventGoesToDlq() throws Exception {
+    try (var producer =
+        new KafkaProducer<String, String>(
+            Map.of(
+                "bootstrap.servers", kafka.getBootstrapServers(),
+                "key.serializer", "org.apache.kafka.common.serialization.StringSerializer",
+                "value.serializer", "org.apache.kafka.common.serialization.StringSerializer"))) {
+      producer.send(new ProducerRecord<>(KAFKA_TOPIC_MAIN, "{not valid json}")).get();
+    }
+
+    List<String> dlq = consumeStrings(KAFKA_TOPIC_DLQ, 15, 1);
+    assertThat(dlq).isNotEmpty();
+    assertThat(dlq.get(0)).contains("errorType");
   }
 
   private void sendStreamEvent(String op, Map<String, Object> payload) throws Exception {

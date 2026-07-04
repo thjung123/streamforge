@@ -51,29 +51,42 @@ public class ConstraintEnforcer<T> implements PipelineBuilder.StreamPattern<T> {
 
     @Override
     public void processElement(T value, Context ctx, Collector<T> out) {
-      List<String> violations = new ArrayList<>();
-      for (ConstraintRule<T> rule : rules) {
-        String violation = rule.validate(value);
-        if (violation != null) {
-          violations.add(violation);
+      try {
+        List<String> violations = new ArrayList<>();
+        for (ConstraintRule<T> rule : rules) {
+          String violation = rule.validate(value);
+          if (violation != null) {
+            violations.add(violation);
+          }
         }
-      }
 
-      if (violations.isEmpty()) {
-        metrics.inc(MetricKeys.CONSTRAINT_PASS_COUNT);
-        out.collect(value);
-      } else {
+        if (violations.isEmpty()) {
+          metrics.inc(MetricKeys.CONSTRAINT_PASS_COUNT);
+          out.collect(value);
+        } else {
+          metrics.inc(MetricKeys.CONSTRAINT_VIOLATION_COUNT);
+          log.warn("[ConstraintEnforcer] Dropped record with violations: {}", violations);
+
+          DlqEvent dlqEvent =
+              DlqEvent.of(
+                  ErrorCodes.CONSTRAINT_VIOLATION,
+                  String.join("; ", violations),
+                  operatorName,
+                  JsonUtils.toJson(value),
+                  null);
+          DLQPublisher.getInstance().publish(dlqEvent);
+        }
+      } catch (Exception e) {
         metrics.inc(MetricKeys.CONSTRAINT_VIOLATION_COUNT);
-        log.warn("[ConstraintEnforcer] Dropped record with violations: {}", violations);
-
-        DlqEvent dlqEvent =
-            DlqEvent.of(
-                ErrorCodes.CONSTRAINT_VIOLATION,
-                String.join("; ", violations),
-                operatorName,
-                JsonUtils.toJson(value),
-                null);
-        DLQPublisher.getInstance().publish(dlqEvent);
+        log.error("[ConstraintEnforcer] Validation failed, routing to DLQ", e);
+        DLQPublisher.getInstance()
+            .publish(
+                DlqEvent.of(
+                    ErrorCodes.CONSTRAINT_VIOLATION,
+                    "validation error: " + e.getMessage(),
+                    operatorName,
+                    String.valueOf(value),
+                    e));
       }
     }
   }

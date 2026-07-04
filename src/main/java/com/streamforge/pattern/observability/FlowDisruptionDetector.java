@@ -11,13 +11,10 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
-import org.apache.flink.util.OutputTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class FlowDisruptionDetector<T> implements PipelineBuilder.StreamPattern<T> {
-
-  public static final OutputTag<String> ALERT_TAG = new OutputTag<>("flow-disruption-alert") {};
 
   private final KeySelector<T, String> keySelector;
   private final Duration timeout;
@@ -66,7 +63,6 @@ public class FlowDisruptionDetector<T> implements PipelineBuilder.StreamPattern<
         disrupted.update(false);
         metrics.inc(MetricKeys.FLOW_RECOVERY_COUNT);
         log.info("[FlowDisruptionDetector] Flow recovered for key: {}", ctx.getCurrentKey());
-        ctx.output(ALERT_TAG, "Flow recovered for key: " + ctx.getCurrentKey());
       }
 
       Long existingTimer = timerTimestamp.value();
@@ -90,8 +86,6 @@ public class FlowDisruptionDetector<T> implements PipelineBuilder.StreamPattern<
           "[FlowDisruptionDetector] No events for {}ms, key: {}",
           timeout.toMillis(),
           ctx.getCurrentKey());
-      ctx.output(
-          ALERT_TAG, "No events for " + timeout.toMillis() + "ms, key: " + ctx.getCurrentKey());
     }
   }
 }

@@ -1,10 +1,11 @@
 package com.streamforge.connector.mongo;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.model.ReplaceOptions;
+import com.mongodb.client.model.BulkWriteOptions;
 import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.metric.Metrics;
@@ -13,7 +14,6 @@ import com.streamforge.core.util.JsonUtils;
 import java.lang.reflect.Field;
 import java.util.Map;
 import org.bson.Document;
-import org.bson.conversions.Bson;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -30,7 +30,7 @@ class MongoSinkBuilderTest {
 
   @SuppressWarnings("unchecked")
   @Test
-  void testInvokeCallsReplaceOne() throws Exception {
+  void bufferedWritesAreFlushedAsABulkWrite() throws Exception {
     // given
     MongoCollection<Document> mockCollection = Mockito.mock(MongoCollection.class);
     MongoSinkBuilder.MongoSinkWriter writer =
@@ -51,17 +51,18 @@ class MongoSinkBuilderTest {
 
     // when
     writer.write(envelop, null);
+    verify(mockCollection, never()).bulkWrite(anyList(), any(BulkWriteOptions.class)); // buffered
+    writer.flush(true);
 
     // then
-    verify(mockCollection, times(1))
-        .replaceOne(any(Bson.class), any(Document.class), any(ReplaceOptions.class));
+    verify(mockCollection, times(1)).bulkWrite(anyList(), any(BulkWriteOptions.class));
     verify(mockMetrics, times(1)).inc(MetricKeys.SINK_SUCCESS_COUNT);
     verify(mockMetrics, never()).inc(MetricKeys.SINK_ERROR_COUNT);
   }
 
   @SuppressWarnings("unchecked")
   @Test
-  void testInvokeIncrementsErrorMetricOnFailure() throws Exception {
+  void bulkWriteFailureRoutesToDlqAndIncrementsErrorMetric() throws Exception {
     // given
     MongoCollection<Document> mockCollection = Mockito.mock(MongoCollection.class);
     MongoSinkBuilder.MongoSinkWriter writer =
@@ -72,9 +73,9 @@ class MongoSinkBuilderTest {
     metricsField.setAccessible(true);
     metricsField.set(writer, mockMetrics);
 
-    doThrow(new RuntimeException("DB replace failed"))
+    doThrow(new RuntimeException("bulk write failed"))
         .when(mockCollection)
-        .replaceOne(any(Bson.class), any(Document.class), any(ReplaceOptions.class));
+        .bulkWrite(anyList(), any(BulkWriteOptions.class));
 
     String payloadJson = JsonUtils.toJson(Map.of("id", 2, "name", "Alice"));
     StreamEnvelop envelop =
@@ -86,11 +87,38 @@ class MongoSinkBuilderTest {
 
     // when
     writer.write(envelop, null);
+    writer.flush(true);
 
     // then
-    verify(mockCollection, times(1))
-        .replaceOne(any(Bson.class), any(Document.class), any(ReplaceOptions.class));
+    verify(mockCollection, times(1)).bulkWrite(anyList(), any(BulkWriteOptions.class));
     verify(mockMetrics, times(1)).inc(MetricKeys.SINK_ERROR_COUNT);
     verify(mockMetrics, never()).inc(MetricKeys.SINK_SUCCESS_COUNT);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  void poisonRecordIsRoutedToDlqNotCrashing() throws Exception {
+    MongoCollection<Document> mockCollection = Mockito.mock(MongoCollection.class);
+    MongoSinkBuilder.MongoSinkWriter writer =
+        new MongoSinkBuilder.MongoSinkWriter("test-job", mockCollection);
+
+    Metrics mockMetrics = mock(Metrics.class);
+    var metricsField = writer.getClass().getDeclaredField("metrics");
+    metricsField.setAccessible(true);
+    metricsField.set(writer, mockMetrics);
+
+    StreamEnvelop poison =
+        StreamEnvelop.builder()
+            .operation("INSERT")
+            .primaryKey("id")
+            .payloadJson("{ not valid json")
+            .build();
+
+    writer.write(poison, null); // must not throw
+    writer.flush(true);
+
+    verify(mockMetrics, times(1)).inc(MetricKeys.SINK_ERROR_COUNT);
+    verify(mockMetrics, never()).inc(MetricKeys.SINK_SUCCESS_COUNT);
+    verify(mockCollection, never()).bulkWrite(anyList(), any(BulkWriteOptions.class));
   }
 }

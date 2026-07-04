@@ -57,10 +57,6 @@ public class KafkaSinkBuilder implements PipelineBuilder.SinkBuilder<StreamEnvel
     return new KafkaSinkBuilder(DeliveryGuarantee.AT_LEAST_ONCE, null, true);
   }
 
-  public static KafkaSinkBuilder compactedExactlyOnce(String transactionalIdPrefix) {
-    return new KafkaSinkBuilder(DeliveryGuarantee.EXACTLY_ONCE, transactionalIdPrefix, true);
-  }
-
   @Override
   public DataStreamSink<StreamEnvelop> write(DataStream<StreamEnvelop> stream, String jobName) {
     return write(stream, jobName, require(STREAM_TOPIC));

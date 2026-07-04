@@ -2,9 +2,12 @@ package com.streamforge.pattern.dedup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.streamforge.core.model.StreamEnvelop;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.streaming.api.operators.KeyedProcessOperator;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.util.KeyedOneInputStreamOperatorTestHarness;
@@ -82,5 +85,43 @@ class DeduplicatorTest {
 
       assertThat(output).hasSize(3).containsExactly("a1", "b1", "c1");
     }
+  }
+
+  @Test
+  @DisplayName("should dedup CDC envelopes by the real primaryKey:eventTime key")
+  void deduplicatesByCompositeCdcKey() throws Exception {
+    var operator =
+        new KeyedProcessOperator<>(
+            new Deduplicator.DeduplicationFunction<StreamEnvelop>(Duration.ofMinutes(10), "test"));
+    KeySelector<StreamEnvelop, String> key = e -> e.getPrimaryKey() + ":" + e.getEventTime();
+
+    Instant t1 = Instant.ofEpochMilli(1_000);
+    Instant t2 = Instant.ofEpochMilli(2_000);
+
+    try (var harness = new KeyedOneInputStreamOperatorTestHarness<>(operator, key, Types.STRING)) {
+      harness.open();
+
+      harness.processElement(new StreamRecord<>(envelope("k1", t1))); // pass
+      harness.processElement(new StreamRecord<>(envelope("k1", t1))); // same key+time -> dropped
+      harness.processElement(new StreamRecord<>(envelope("k1", t2))); // same key, new time -> pass
+      harness.processElement(new StreamRecord<>(envelope("k2", t1))); // pass
+
+      List<String> keys =
+          harness.extractOutputStreamRecords().stream()
+              .map(r -> (StreamEnvelop) r.getValue())
+              .map(e -> e.getPrimaryKey() + ":" + e.getEventTime())
+              .toList();
+
+      assertThat(keys).containsExactly("k1:" + t1, "k1:" + t2, "k2:" + t1);
+    }
+  }
+
+  private static StreamEnvelop envelope(String primaryKey, Instant eventTime) {
+    return StreamEnvelop.builder()
+        .operation("INSERT")
+        .primaryKey(primaryKey)
+        .eventTime(eventTime)
+        .payloadJson("{\"_id\":\"" + primaryKey + "\"}")
+        .build();
   }
 }

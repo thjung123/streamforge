@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import com.streamforge.core.model.DlqEvent;
 import java.lang.reflect.Field;
+import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.AfterEach;
@@ -37,28 +38,26 @@ class DLQPublisherTest {
   }
 
   @Test
-  void publish_shouldSendDlqEventSuccessfully() {
-    when(mockProducer.send(any(ProducerRecord.class), any())).thenReturn(null);
-
+  void publish_shouldSendDlqEventAsynchronously() {
     DLQPublisher publisher = DLQPublisher.getInstance();
     DlqEvent event = DlqEvent.of("SINK_ERROR", "something failed", "test-sink", "{}", null);
 
     publisher.publish(event);
 
-    verify(mockProducer, times(1)).send(any(ProducerRecord.class), any());
+    verify(mockProducer, times(1)).send(any(ProducerRecord.class), any(Callback.class));
   }
 
   @Test
-  void publish_shouldHandleExceptionGracefully() {
-    when(mockProducer.send(any(ProducerRecord.class), any()))
+  void publish_shouldHandleSynchronousSendFailureGracefully() {
+    when(mockProducer.send(any(ProducerRecord.class), any(Callback.class)))
         .thenThrow(new RuntimeException("send failed"));
 
     DLQPublisher publisher = DLQPublisher.getInstance();
     DlqEvent event = DlqEvent.of("SINK_ERROR", "broken", "test-sink", "{}", null);
 
-    publisher.publish(event);
+    publisher.publish(event); // must not throw
 
-    verify(mockProducer, times(1)).send(any(ProducerRecord.class), any());
+    verify(mockProducer, times(1)).send(any(ProducerRecord.class), any(Callback.class));
   }
 
   private static void resetInstance() throws Exception {

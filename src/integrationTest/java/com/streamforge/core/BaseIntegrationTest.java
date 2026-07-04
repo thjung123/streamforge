@@ -13,6 +13,7 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.bson.Document;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -163,6 +164,26 @@ public abstract class BaseIntegrationTest {
         throw e;
       }
     }
+  }
+
+  protected List<String> consumeStrings(String topic, int timeoutSeconds, int minCount) {
+    Properties props = new Properties();
+    props.put("bootstrap.servers", kafka.getBootstrapServers());
+    props.put("group.id", "test-consumer-" + topic + "-" + UUID.randomUUID());
+    props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+    props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+    props.put("auto.offset.reset", "earliest");
+
+    List<String> out = new ArrayList<>();
+    try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
+      consumer.subscribe(List.of(topic));
+      Instant start = Instant.now();
+      while (Duration.between(start, Instant.now()).toSeconds() < timeoutSeconds
+          && out.size() < minCount) {
+        consumer.poll(Duration.ofMillis(500)).forEach(r -> out.add(r.value()));
+      }
+    }
+    return out;
   }
 
   protected Document waitForMongoDocument(Object id, int timeoutSeconds, String expectedName)

@@ -117,16 +117,6 @@ class KafkaSinkBuilderTest {
     }
 
     @Test
-    @DisplayName("should enable compaction with EXACTLY_ONCE via factory method")
-    void compactedExactlyOnceFactory() {
-      var builder = KafkaSinkBuilder.compactedExactlyOnce("txn-compact");
-
-      assertThat(builder.isCompaction()).isTrue();
-      assertThat(builder.getGuarantee()).isEqualTo(DeliveryGuarantee.EXACTLY_ONCE);
-      assertThat(builder.getTransactionalIdPrefix()).isEqualTo("txn-compact");
-    }
-
-    @Test
     @DisplayName("should not enable compaction for exactlyOnce factory")
     void exactlyOnceNoCompaction() {
       var builder = KafkaSinkBuilder.exactlyOnce("txn-job");
