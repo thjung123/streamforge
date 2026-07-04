@@ -6,10 +6,14 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   integration-test:
     name: Integration Test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -27,6 +31,9 @@ jobs:
 
       - name: Build
         run: ./gradlew clean assemble --no-daemon --stacktrace
+
+      - name: Unit Tests & Format Check
+        run: ./gradlew test spotlessCheck --no-daemon --stacktrace
 
       - name: Docker info
         run: docker info
