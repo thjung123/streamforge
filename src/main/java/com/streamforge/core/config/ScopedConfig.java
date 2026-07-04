@@ -7,6 +7,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class ScopedConfig {
 
@@ -16,19 +18,23 @@ public final class ScopedConfig {
   private static final Map<String, Map<String, String>> jsonConfig;
   private static volatile String activeJob;
 
+  private static final Logger log = LoggerFactory.getLogger(ScopedConfig.class);
+
   static {
     dotenv = Dotenv.configure().directory(".").filename(".env").ignoreIfMissing().load();
     jsonConfig = loadJsonConfig("streamforge.json");
 
-    System.out.println("[CONFIG] dotenv loaded: " + dotenv.entries().size() + " entries");
-    System.out.println("[CONFIG] json loaded: " + jsonConfig.size() + " sections");
+    log.info(
+        "config loaded: {} dotenv entries, {} json sections",
+        dotenv.entries().size(),
+        jsonConfig.size());
   }
 
   private ScopedConfig() {}
 
   public static void activateJob(String jobName) {
     activeJob = jobName;
-    System.out.println("[CONFIG] active job: " + jobName);
+    log.info("active job: {}", jobName);
   }
 
   public static String activeJob() {
@@ -49,25 +55,38 @@ public final class ScopedConfig {
     return (value != null && !value.isBlank()) ? value : defaultValue;
   }
 
+  public static String getGlobalOrDefault(String key, String defaultValue) {
+    String value = System.getProperty(key);
+    if (value == null) {
+      value = System.getenv(key);
+    }
+    if (value == null) {
+      value = dotenv.get(key);
+    }
+    if (value == null) {
+      Map<String, String> commonSection = jsonConfig.get(COMMON_KEY);
+      if (commonSection != null) {
+        value = commonSection.get(key);
+      }
+    }
+    return (value != null && !value.isBlank()) ? value : defaultValue;
+  }
+
   public static boolean exists(String key) {
     String value = resolve(key);
     return value != null && !value.isBlank();
   }
 
   private static String resolve(String key) {
-    // 1. System property
     String value = System.getProperty(key);
     if (value != null) return value;
 
-    // 2. Environment variable
     value = System.getenv(key);
     if (value != null) return value;
 
-    // 3. .env file
     value = dotenv.get(key);
     if (value != null) return value;
 
-    // 4. JSON — active job section
     if (activeJob != null) {
       Map<String, String> jobSection = jsonConfig.get(activeJob);
       if (jobSection != null) {
@@ -76,7 +95,6 @@ public final class ScopedConfig {
       }
     }
 
-    // 5. JSON — common section
     Map<String, String> commonSection = jsonConfig.get(COMMON_KEY);
     if (commonSection != null) {
       value = commonSection.get(key);
@@ -95,7 +113,7 @@ public final class ScopedConfig {
       ObjectMapper mapper = new ObjectMapper();
       return mapper.readValue(file, new TypeReference<>() {});
     } catch (IOException e) {
-      System.err.println("[CONFIG] Failed to load " + path + ": " + e.getMessage());
+      log.error("Failed to load {}: {}", path, e.getMessage());
       return Collections.emptyMap();
     }
   }

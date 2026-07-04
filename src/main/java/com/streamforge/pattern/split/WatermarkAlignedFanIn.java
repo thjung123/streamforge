@@ -14,7 +14,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
 
-public class OrderedFanIn<T> {
+public class WatermarkAlignedFanIn<T> {
 
   @FunctionalInterface
   public interface SourceTagger<T> extends Serializable {
@@ -26,7 +26,7 @@ public class OrderedFanIn<T> {
   private final Map<String, DataStream<T>> sources;
   private final SourceTagger<T> sourceTagger;
 
-  private OrderedFanIn(
+  private WatermarkAlignedFanIn(
       TimestampExtractor<T> timestampExtractor,
       Duration maxDrift,
       Map<String, DataStream<T>> sources,
@@ -77,7 +77,7 @@ public class OrderedFanIn<T> {
       }
     }
 
-    return first.union(rest).process(new MergeFunction<>()).name("OrderedFanIn");
+    return first.union(rest).process(new MergeFunction<>()).name("WatermarkAlignedFanIn");
   }
 
   public static final class Builder<T> {
@@ -115,14 +115,14 @@ public class OrderedFanIn<T> {
       return this;
     }
 
-    public OrderedFanIn<T> build() {
+    public WatermarkAlignedFanIn<T> build() {
       if (maxDrift == null) {
         throw new IllegalArgumentException("maxDrift must be set");
       }
       if (sources.size() < 2) {
         throw new IllegalArgumentException("At least two sources are required");
       }
-      return new OrderedFanIn<>(timestampExtractor, maxDrift, sources, sourceTagger);
+      return new WatermarkAlignedFanIn<>(timestampExtractor, maxDrift, sources, sourceTagger);
     }
   }
 
@@ -132,7 +132,7 @@ public class OrderedFanIn<T> {
 
     @Override
     public void open(Configuration parameters) {
-      this.metrics = new Metrics(getRuntimeContext(), "fanin", "OrderedFanIn");
+      this.metrics = new Metrics(getRuntimeContext(), "fanin", "WatermarkAlignedFanIn");
     }
 
     @Override

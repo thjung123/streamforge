@@ -260,9 +260,7 @@ public class DynamicJoiner<T, R> implements PipelineBuilder.JoinPattern<T, R> {
       long seq = nextSeq();
       leftBuffer.put(seq, leftEvent);
 
-      if (joinType == JoinType.LEFT || joinType == JoinType.FULL_OUTER) {
-        ctx.timerService().registerProcessingTimeTimer(now + ttl.toMillis());
-      }
+      ctx.timerService().registerProcessingTimeTimer(now + ttl.toMillis());
     }
 
     @Override
@@ -290,38 +288,39 @@ public class DynamicJoiner<T, R> implements PipelineBuilder.JoinPattern<T, R> {
       long seq = nextSeq();
       rightBuffer.put(seq, rightEvent);
 
-      if (joinType == JoinType.RIGHT || joinType == JoinType.FULL_OUTER) {
-        ctx.timerService().registerProcessingTimeTimer(now + ttl.toMillis());
-      }
+      ctx.timerService().registerProcessingTimeTimer(now + ttl.toMillis());
     }
 
     @Override
     public void onTimer(long timestamp, OnTimerContext ctx, Collector<T> out) throws Exception {
-      if (joinType == JoinType.LEFT || joinType == JoinType.FULL_OUTER) {
-        var leftIter = leftBuffer.entries().iterator();
-        while (leftIter.hasNext()) {
-          Map.Entry<Long, BufferedEvent<T>> entry = leftIter.next();
-          BufferedEvent<T> buffered = entry.getValue();
-          if (buffered.getArrivalTime() + ttl.toMillis() <= timestamp && buffered.isUnmatched()) {
+      boolean emitLeftUnmatched = joinType == JoinType.LEFT || joinType == JoinType.FULL_OUTER;
+      boolean emitRightUnmatched = joinType == JoinType.RIGHT || joinType == JoinType.FULL_OUTER;
+
+      var leftIter = leftBuffer.entries().iterator();
+      while (leftIter.hasNext()) {
+        Map.Entry<Long, BufferedEvent<T>> entry = leftIter.next();
+        BufferedEvent<T> buffered = entry.getValue();
+        if (buffered.getArrivalTime() + ttl.toMillis() <= timestamp) {
+          if (emitLeftUnmatched && buffered.isUnmatched()) {
             out.collect(buffered.getEvent());
             metrics.inc(MetricKeys.DYNAMIC_JOINER_LEFT_PASS_COUNT);
-            metrics.inc(MetricKeys.DYNAMIC_JOINER_EXPIRE_COUNT);
-            leftIter.remove();
           }
+          metrics.inc(MetricKeys.DYNAMIC_JOINER_EXPIRE_COUNT);
+          leftIter.remove();
         }
       }
 
-      if (joinType == JoinType.RIGHT || joinType == JoinType.FULL_OUTER) {
-        var rightIter = rightBuffer.entries().iterator();
-        while (rightIter.hasNext()) {
-          Map.Entry<Long, BufferedEvent<R>> entry = rightIter.next();
-          BufferedEvent<R> buffered = entry.getValue();
-          if (buffered.getArrivalTime() + ttl.toMillis() <= timestamp && buffered.isUnmatched()) {
+      var rightIter = rightBuffer.entries().iterator();
+      while (rightIter.hasNext()) {
+        Map.Entry<Long, BufferedEvent<R>> entry = rightIter.next();
+        BufferedEvent<R> buffered = entry.getValue();
+        if (buffered.getArrivalTime() + ttl.toMillis() <= timestamp) {
+          if (emitRightUnmatched && buffered.isUnmatched()) {
             out.collect(rightEmitFunction.convert(buffered.getEvent()));
             metrics.inc(MetricKeys.DYNAMIC_JOINER_RIGHT_PASS_COUNT);
-            metrics.inc(MetricKeys.DYNAMIC_JOINER_EXPIRE_COUNT);
-            rightIter.remove();
           }
+          metrics.inc(MetricKeys.DYNAMIC_JOINER_EXPIRE_COUNT);
+          rightIter.remove();
         }
       }
     }

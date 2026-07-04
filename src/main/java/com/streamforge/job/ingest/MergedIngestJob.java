@@ -5,12 +5,14 @@ import static com.streamforge.core.config.ScopedConfig.*;
 
 import com.streamforge.connector.kafka.KafkaSourceBuilder;
 import com.streamforge.connector.mongo.MongoSinkBuilder;
+import com.streamforge.core.config.CheckpointConfig;
+import com.streamforge.core.config.FlinkEnv;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.parser.StreamEnvelopParser;
 import com.streamforge.core.pipeline.PipelineBuilder;
-import com.streamforge.pattern.split.OrderedFanIn;
+import com.streamforge.pattern.split.WatermarkAlignedFanIn;
 import java.time.Duration;
 import java.util.HashMap;
 import org.apache.flink.api.common.JobExecutionResult;
@@ -33,8 +35,9 @@ public class MergedIngestJob implements StreamJob {
 
   public StreamExecutionEnvironment buildPipeline(
       PipelineBuilder.SinkBuilder<StreamEnvelop> sinkBuilder) {
-    StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    StreamExecutionEnvironment env = FlinkEnv.create();
     env.setParallelism(1);
+    CheckpointConfig.enableAtLeastOnce(env);
 
     require(STREAM_TOPIC);
     DataStream<String> ordersRaw = new KafkaSourceBuilder().build(env, name());
@@ -46,7 +49,7 @@ public class MergedIngestJob implements StreamJob {
     DataStream<StreamEnvelop> payments = new StreamEnvelopParser(JOB_NAME).parse(paymentsRaw);
 
     DataStream<StreamEnvelop> merged =
-        OrderedFanIn.builder(StreamEnvelop::getEventTime)
+        WatermarkAlignedFanIn.builder(StreamEnvelop::getEventTime)
             .source("orders", orders)
             .source("payments", payments)
             .maxDrift(Duration.ofSeconds(5))
@@ -71,7 +74,7 @@ public class MergedIngestJob implements StreamJob {
     ScopedConfig.activateJob(name());
     try (StreamExecutionEnvironment env = buildPipeline()) {
       JobExecutionResult result = env.execute(name());
-      System.out.println("Job duration: " + result.getNetRuntime());
+      logCompletion(result.getNetRuntime());
     }
   }
 

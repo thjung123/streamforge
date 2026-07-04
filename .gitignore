@@ -8,3 +8,7 @@ build
 .idea/**
 /docs/concepts/*
 **/local_test
+
+# local env (see .env.example)
+.env
+.DS_Store

@@ -6,10 +6,16 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
 public final class CheckpointConfig {
 
+  public static final String CHECKPOINT_DIR = "CHECKPOINT_DIR";
+
   private CheckpointConfig() {}
 
   public static void enableExactlyOnce(StreamExecutionEnvironment env) {
     configure(env, CheckpointingMode.EXACTLY_ONCE, Duration.ofMinutes(1));
+  }
+
+  public static void enableAtLeastOnce(StreamExecutionEnvironment env) {
+    configure(env, CheckpointingMode.AT_LEAST_ONCE, Duration.ofMinutes(1));
   }
 
   public static void configure(
@@ -20,5 +26,10 @@ public final class CheckpointConfig {
     config.setMinPauseBetweenCheckpoints(interval.toMillis() / 2);
     config.setCheckpointTimeout(interval.toMillis() * 2);
     config.setMaxConcurrentCheckpoints(1);
+
+    String checkpointDir = ScopedConfig.getOrDefault(CHECKPOINT_DIR, null);
+    if (checkpointDir != null && !checkpointDir.isBlank()) {
+      config.setCheckpointStorage(checkpointDir);
+    }
   }
 }

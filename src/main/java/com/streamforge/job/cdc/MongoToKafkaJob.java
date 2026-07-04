@@ -1,7 +1,10 @@
 package com.streamforge.job.cdc;
 
+import com.streamforge.connector.kafka.KafkaConfigKeys;
 import com.streamforge.connector.kafka.KafkaSinkBuilder;
 import com.streamforge.connector.mongo.MultiCdcSourceBuilder;
+import com.streamforge.core.config.CheckpointConfig;
+import com.streamforge.core.config.FlinkEnv;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
@@ -18,6 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import org.apache.flink.api.common.JobExecutionResult;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
 public class MongoToKafkaJob implements StreamJob {
@@ -32,14 +36,32 @@ public class MongoToKafkaJob implements StreamJob {
   }
 
   public StreamExecutionEnvironment buildPipeline() {
-    return buildPipeline(KafkaSinkBuilder.exactlyOnce("txn-" + name()));
+    return buildPipeline(defaultSink());
+  }
+
+  private PipelineBuilder.SinkBuilder<StreamEnvelop> defaultSink() {
+    String mode =
+        ScopedConfig.getGlobalOrDefault(
+            KafkaConfigKeys.DELIVERY_MODE, KafkaConfigKeys.DELIVERY_AT_LEAST_ONCE);
+    return KafkaConfigKeys.DELIVERY_EXACTLY_ONCE.equalsIgnoreCase(mode)
+        ? KafkaSinkBuilder.exactlyOnce("txn-" + name())
+        : new KafkaSinkBuilder();
   }
 
   public StreamExecutionEnvironment buildPipeline(PipelineBuilder.SinkBuilder<StreamEnvelop> sink) {
-    StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    StreamExecutionEnvironment env = FlinkEnv.create();
     env.setParallelism(1);
-    PipelineBuilder.from(new MultiCdcSourceBuilder().build(env, name()))
-        .parse(new MongoToKafkaParser())
+    CheckpointConfig.enableAtLeastOnce(env);
+    DataStream<StreamEnvelop> parsed =
+        PipelineBuilder.from(new MultiCdcSourceBuilder().build(env, name()))
+            .parse(new MongoToKafkaParser())
+            .getStream();
+    PipelineBuilder.from(buildChain(parsed)).to(sink, name());
+    return env;
+  }
+
+  public DataStream<StreamEnvelop> buildChain(DataStream<StreamEnvelop> parsed) {
+    return PipelineBuilder.from(parsed)
         .apply(new FlowDisruptionDetector<>(StreamEnvelop::getSource, Duration.ofMinutes(5)))
         .apply(new FilterInterceptor<>(e -> !"unknown".equals(e.getOperation())))
         .apply(
@@ -64,9 +86,7 @@ public class MongoToKafkaJob implements StreamJob {
                 QualityCheck.of("null_keys", e -> e.getPrimaryKey() == null)))
         .apply(new MetadataDecorator<>(StreamEnvelop::getMetadata, "pre-sink"))
         .process(new MongoToKafkaProcessor())
-        .to(sink, name());
-
-    return env;
+        .getStream();
   }
 
   @Override
@@ -74,7 +94,7 @@ public class MongoToKafkaJob implements StreamJob {
     ScopedConfig.activateJob(name());
     try (StreamExecutionEnvironment env = buildPipeline()) {
       JobExecutionResult result = env.execute(name());
-      System.out.println("Job duration: " + result.getNetRuntime());
+      logCompletion(result.getNetRuntime());
     }
   }
 

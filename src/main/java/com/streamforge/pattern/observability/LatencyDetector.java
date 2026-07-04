@@ -9,13 +9,10 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
-import org.apache.flink.util.OutputTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class LatencyDetector<T> implements PipelineBuilder.StreamPattern<T> {
-
-  public static final OutputTag<String> ALERT_TAG = new OutputTag<>("latency-alert") {};
 
   private final TimestampExtractor<T> eventTimeExtractor;
   private final Duration threshold;
@@ -30,6 +27,10 @@ public class LatencyDetector<T> implements PipelineBuilder.StreamPattern<T> {
     return stream
         .process(new LatencyFunction<>(eventTimeExtractor, threshold, name()))
         .name(name());
+  }
+
+  static boolean exceedsThreshold(long latencyMs, Duration threshold) {
+    return latencyMs > threshold.toMillis();
   }
 
   static class LatencyFunction<T> extends ProcessFunction<T, T> {
@@ -66,15 +67,12 @@ public class LatencyDetector<T> implements PipelineBuilder.StreamPattern<T> {
         long latencyMs = System.currentTimeMillis() - eventTime.toEpochMilli();
         lastLatencyMs = latencyMs;
 
-        if (latencyMs > threshold.toMillis()) {
+        if (exceedsThreshold(latencyMs, threshold)) {
           metrics.inc(MetricKeys.LATENCY_ALERT_COUNT);
           log.warn(
               "[LatencyDetector] Latency {}ms exceeded threshold {}ms",
               latencyMs,
               threshold.toMillis());
-          ctx.output(
-              ALERT_TAG,
-              "Latency " + latencyMs + "ms exceeded threshold " + threshold.toMillis() + "ms");
         }
       }
       out.collect(value);

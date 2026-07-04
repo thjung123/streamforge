@@ -2,7 +2,8 @@
   "common": {
     "KAFKA_BOOTSTRAP_SERVERS": "localhost:9092",
     "MONGO_URI": "mongodb://localhost:27017/?replicaSet=rs0",
-    "DLQ_TOPIC": "stream-dlq"
+    "DLQ_TOPIC": "stream-dlq",
+    "DELIVERY_MODE": "at_least_once"
   },
   "MongoToKafka": {
     "STREAM_TOPIC": "mongo-events",
@@ -19,5 +20,27 @@
     "STREAM_TOPIC_SECONDARY": "payments-events",
     "MONGO_DB": "sink_db",
     "MONGO_COLLECTION": "merged_events"
+  },
+  "EventRouter": {
+    "STREAM_TOPIC": "stream-topic",
+    "ES_HOST": "http://localhost:9200",
+    "ES_INDEX": "stream-events",
+    "MONGO_DB": "sink_db",
+    "MONGO_COLLECTION": "routed_events"
+  },
+  "OrderPaymentJoin": {
+    "STREAM_TOPIC": "orders-events",
+    "PAYMENT_TOPIC": "payments-events",
+    "MONGO_DB": "sink_db",
+    "MONGO_COLLECTION": "order_payments"
+  },
+  "UserStateMaterialize": {
+    "STREAM_TOPIC": "stream-topic",
+    "CHANGELOG_TOPIC": "changelog"
+  },
+  "UserSessionAnalysis": {
+    "STREAM_TOPIC": "stream-topic",
+    "MONGO_DB": "sink_db",
+    "MONGO_COLLECTION": "user_sessions"
   }
 }

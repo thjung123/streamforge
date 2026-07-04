@@ -8,6 +8,8 @@ import com.streamforge.core.model.DlqEvent;
 import com.streamforge.core.model.StreamEnvelop;
 import com.streamforge.core.pipeline.PipelineBuilder;
 import com.streamforge.job.cdc.MongoToKafkaJob;
+import java.time.Instant;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -15,6 +17,7 @@ import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.bson.BsonDocument;
+import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -137,15 +140,36 @@ public class MongoToKafkaParser implements PipelineBuilder.ParserFunction<Docume
         primaryKey = String.valueOf(payload.get("_id"));
       }
 
-      return StreamEnvelop.of(
-          operation,
-          doc.getString("source") != null ? doc.getString("source") : "unknown",
-          payload,
-          primaryKey);
+      StreamEnvelop envelop =
+          StreamEnvelop.of(
+              operation,
+              doc.getString("source") != null ? doc.getString("source") : "unknown",
+              payload,
+              primaryKey);
+
+      Instant eventTime = extractEventTime(doc);
+      if (eventTime != null) {
+        envelop.setEventTime(eventTime);
+      }
+      return envelop;
 
     } catch (Exception e) {
       log.warn("Failed to map Document to StreamEnvelop: {}", doc, e);
       throw e;
     }
+  }
+
+  private static Instant extractEventTime(Document doc) {
+    Object raw = doc.get("eventTime");
+    if (raw instanceof BsonTimestamp ts) {
+      return Instant.ofEpochSecond(ts.getTime(), ts.getInc());
+    }
+    if (raw instanceof Date d) {
+      return d.toInstant();
+    }
+    if (raw instanceof Instant i) {
+      return i;
+    }
+    return null;
   }
 }

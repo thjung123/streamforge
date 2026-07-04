@@ -1,5 +1,6 @@
 package com.streamforge.core.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.streamforge.core.util.JsonUtils;
 import java.io.Serial;
 import java.io.Serializable;
@@ -57,6 +58,7 @@ public class StreamEnvelop implements Serializable {
     return JsonUtils.toJson(this);
   }
 
+  @JsonIgnore
   @SuppressWarnings("unchecked")
   public Map<String, Object> getPayloadAsMap() {
     return payloadJson != null ? JsonUtils.fromJson(payloadJson, Map.class) : null;

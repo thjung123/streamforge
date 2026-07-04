@@ -2,6 +2,8 @@ package com.streamforge.job.cdc;
 
 import com.streamforge.connector.kafka.KafkaSourceBuilder;
 import com.streamforge.connector.mongo.MongoSinkBuilder;
+import com.streamforge.core.config.CheckpointConfig;
+import com.streamforge.core.config.FlinkEnv;
 import com.streamforge.core.config.ScopedConfig;
 import com.streamforge.core.launcher.StreamJob;
 import com.streamforge.core.model.StreamEnvelop;
@@ -33,8 +35,9 @@ public class KafkaToMongoJob implements StreamJob {
   }
 
   public StreamExecutionEnvironment buildPipeline() {
-    StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    StreamExecutionEnvironment env = FlinkEnv.create();
     env.setParallelism(1);
+    CheckpointConfig.enableAtLeastOnce(env);
 
     DataStream<StreamEnvelop> ref1 = buildReferenceStream(env, REFERENCE_TOPIC, "ref");
     DataStream<StreamEnvelop> ref2 = buildReferenceStream(env, REFERENCE_TOPIC_2, "ref2");
@@ -93,7 +96,7 @@ public class KafkaToMongoJob implements StreamJob {
     ScopedConfig.activateJob(name());
     try (StreamExecutionEnvironment env = buildPipeline()) {
       JobExecutionResult result = env.execute(name());
-      System.out.println("Job duration: " + result.getNetRuntime());
+      logCompletion(result.getNetRuntime());
     }
   }
 

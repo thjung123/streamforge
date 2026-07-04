@@ -15,7 +15,7 @@ import org.apache.flink.streaming.util.OneInputStreamOperatorTestHarness;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-class OrderedFanInTest {
+class WatermarkAlignedFanInTest {
 
   private static final TimestampExtractor<String> EXTRACTOR = s -> Instant.now();
 
@@ -25,7 +25,7 @@ class OrderedFanInTest {
   }
 
   private OneInputStreamOperatorTestHarness<String, String> createHarness(
-      OrderedFanIn.MergeFunction<String> function) throws Exception {
+      WatermarkAlignedFanIn.MergeFunction<String> function) throws Exception {
     var operator = new ProcessOperator<>(function);
     var harness = new OneInputStreamOperatorTestHarness<>(operator);
     harness.open();
@@ -35,7 +35,7 @@ class OrderedFanInTest {
   @Test
   @DisplayName("should pass through all merged elements")
   void mergedElementsPassThrough() throws Exception {
-    var function = new OrderedFanIn.MergeFunction<String>();
+    var function = new WatermarkAlignedFanIn.MergeFunction<String>();
 
     try (var harness = createHarness(function)) {
       harness.processElement(new StreamRecord<>("event1"));
@@ -53,7 +53,7 @@ class OrderedFanInTest {
   @DisplayName("should throw when extractor is null")
   void nullExtractorThrows() {
     TimestampExtractor<String> nullExtractor = null;
-    assertThatThrownBy(() -> OrderedFanIn.builder(nullExtractor))
+    assertThatThrownBy(() -> WatermarkAlignedFanIn.builder(nullExtractor))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("must not be null");
   }
@@ -63,7 +63,7 @@ class OrderedFanInTest {
   void fewerThanTwoSourcesThrows() {
     assertThatThrownBy(
             () ->
-                OrderedFanIn.builder(EXTRACTOR)
+                WatermarkAlignedFanIn.builder(EXTRACTOR)
                     .source("only", mockStream())
                     .maxDrift(Duration.ofSeconds(1))
                     .build())
@@ -74,7 +74,7 @@ class OrderedFanInTest {
   @Test
   @DisplayName("should throw when duplicate source name")
   void duplicateSourceNameThrows() {
-    var builder = OrderedFanIn.builder(EXTRACTOR).source("dup", mockStream());
+    var builder = WatermarkAlignedFanIn.builder(EXTRACTOR).source("dup", mockStream());
 
     assertThatThrownBy(() -> builder.source("dup", mockStream()))
         .isInstanceOf(IllegalArgumentException.class)
@@ -84,7 +84,7 @@ class OrderedFanInTest {
   @Test
   @DisplayName("should throw when stream is null")
   void nullStreamThrows() {
-    assertThatThrownBy(() -> OrderedFanIn.builder(EXTRACTOR).source("name", null))
+    assertThatThrownBy(() -> WatermarkAlignedFanIn.builder(EXTRACTOR).source("name", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("must not be null");
   }
@@ -94,7 +94,7 @@ class OrderedFanInTest {
   void maxDriftNotSetThrows() {
     assertThatThrownBy(
             () ->
-                OrderedFanIn.builder(EXTRACTOR)
+                WatermarkAlignedFanIn.builder(EXTRACTOR)
                     .source("a", mockStream())
                     .source("b", mockStream())
                     .build())
@@ -105,7 +105,7 @@ class OrderedFanInTest {
   @Test
   @DisplayName("should throw when source name is blank")
   void blankSourceNameThrows() {
-    assertThatThrownBy(() -> OrderedFanIn.builder(EXTRACTOR).source("", mockStream()))
+    assertThatThrownBy(() -> WatermarkAlignedFanIn.builder(EXTRACTOR).source("", mockStream()))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("must not be null or blank");
   }

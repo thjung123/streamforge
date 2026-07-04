@@ -39,28 +39,16 @@ class LatencyDetectorTest {
   }
 
   @Test
-  @DisplayName("should not emit alert when latency is below threshold")
-  void noAlertBelowThreshold() throws Exception {
-    try (var harness = createHarness()) {
-      long now = System.currentTimeMillis();
-      harness.processElement(new StreamRecord<>(now));
-
-      var alerts = harness.getSideOutput(LatencyDetector.ALERT_TAG);
-      assertThat(alerts).isNullOrEmpty();
-    }
+  @DisplayName("should flag latency above the threshold")
+  void aboveThreshold() {
+    assertThat(LatencyDetector.exceedsThreshold(6_000L, THRESHOLD)).isTrue();
   }
 
   @Test
-  @DisplayName("should emit alert when latency exceeds threshold")
-  void alertAboveThreshold() throws Exception {
-    try (var harness = createHarness()) {
-      long old = System.currentTimeMillis() - 10_000L;
-      harness.processElement(new StreamRecord<>(old));
-
-      var alerts = harness.getSideOutput(LatencyDetector.ALERT_TAG);
-      assertThat(alerts).hasSize(1);
-      assertThat(alerts.poll().getValue()).contains("exceeded threshold");
-    }
+  @DisplayName("should not flag latency at or below the threshold")
+  void withinThreshold() {
+    assertThat(LatencyDetector.exceedsThreshold(5_000L, THRESHOLD)).isFalse();
+    assertThat(LatencyDetector.exceedsThreshold(4_000L, THRESHOLD)).isFalse();
   }
 
   @Test
@@ -76,7 +64,6 @@ class LatencyDetectorTest {
           harness.extractOutputStreamRecords().stream().map(r -> (String) r.getValue()).toList();
 
       assertThat(output).containsExactly("test");
-      assertThat(harness.getSideOutput(LatencyDetector.ALERT_TAG)).isNullOrEmpty();
     }
   }
 }

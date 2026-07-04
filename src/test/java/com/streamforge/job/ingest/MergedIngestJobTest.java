@@ -3,7 +3,7 @@ package com.streamforge.job.ingest;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.streamforge.core.model.StreamEnvelop;
-import com.streamforge.pattern.split.OrderedFanIn;
+import com.streamforge.pattern.split.WatermarkAlignedFanIn;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -53,7 +53,7 @@ class MergedIngestJobTest {
         env.fromCollection(paymentsData, TypeInformation.of(StreamEnvelop.class));
 
     DataStream<StreamEnvelop> merged =
-        OrderedFanIn.<StreamEnvelop>builder(StreamEnvelop::getEventTime)
+        WatermarkAlignedFanIn.<StreamEnvelop>builder(StreamEnvelop::getEventTime)
             .source("orders", orders)
             .source("payments", payments)
             .maxDrift(Duration.ofSeconds(5))
@@ -90,7 +90,7 @@ class MergedIngestJobTest {
             TypeInformation.of(StreamEnvelop.class));
 
     DataStream<StreamEnvelop> merged =
-        OrderedFanIn.<StreamEnvelop>builder(StreamEnvelop::getEventTime)
+        WatermarkAlignedFanIn.<StreamEnvelop>builder(StreamEnvelop::getEventTime)
             .source("orders", orders)
             .source("payments", payments)
             .maxDrift(Duration.ofSeconds(5))

@@ -7,6 +7,7 @@ import com.streamforge.core.config.MetricKeys;
 import com.streamforge.core.metric.Metrics;
 import com.streamforge.core.model.DlqEvent;
 import com.streamforge.core.util.JsonUtils;
+import java.time.Duration;
 import java.util.Properties;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -26,6 +27,16 @@ public class DLQPublisher {
   private DLQPublisher() {
     this.topic = require(KafkaConfigKeys.DLQ_TOPIC);
     this.producer = new KafkaProducer<>(props());
+    Runtime.getRuntime()
+        .addShutdownHook(
+            new Thread(
+                () -> {
+                  try {
+                    producer.close(Duration.ofSeconds(5));
+                  } catch (Exception e) {
+                    log.debug("[DLQ] Producer close failed on shutdown", e);
+                  }
+                }));
   }
 
   public static DLQPublisher getInstance() {
@@ -46,30 +57,18 @@ public class DLQPublisher {
   public void publish(DlqEvent event) {
     try {
       String json = JsonUtils.toJson(event);
-      ProducerRecord<String, String> record = new ProducerRecord<>(topic, json);
-
       producer.send(
-          record,
-          (metadata, exception) -> {
-            if (exception != null) {
-              log.error("[DLQ] Failed to publish event asynchronously: {}", event, exception);
+          new ProducerRecord<>(topic, json),
+          (metadata, ex) -> {
+            if (ex != null) {
+              log.error("[DLQ] Failed to publish event: {}", event, ex);
               if (metrics != null) {
                 metrics.inc(MetricKeys.DLQ_FAILED_COUNT);
               }
-            } else {
-              if (metrics != null) {
-                metrics.inc(MetricKeys.DLQ_PUBLISHED_COUNT);
-              }
-              if (log.isDebugEnabled()) {
-                log.debug(
-                    "[DLQ] Published to {} partition={} offset={}",
-                    metadata.topic(),
-                    metadata.partition(),
-                    metadata.offset());
-              }
+            } else if (metrics != null) {
+              metrics.inc(MetricKeys.DLQ_PUBLISHED_COUNT);
             }
           });
-
     } catch (Exception e) {
       log.error("[DLQ] Failed to publish event: {}", event, e);
       if (metrics != null) {
@@ -83,6 +82,12 @@ public class DLQPublisher {
     props.put("bootstrap.servers", require(KafkaConfigKeys.KAFKA_BOOTSTRAP_SERVERS));
     props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
     props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+    props.put("acks", "all");
+    props.put("enable.idempotence", "true");
+    props.put("retries", String.valueOf(Integer.MAX_VALUE));
+    props.put("max.in.flight.requests.per.connection", "5");
+    props.put("delivery.timeout.ms", "120000");
+    props.put("max.block.ms", "2000");
     return props;
   }
 

@@ -1,15 +1,14 @@
 package com.streamforge.connector.mongo;
 
 import static com.streamforge.connector.mongo.MongoConfigKeys.*;
-import static com.streamforge.core.config.ScopedConfig.getOrDefault;
 import static com.streamforge.core.config.ScopedConfig.require;
 
 import com.mongodb.MongoException;
 import com.mongodb.client.*;
 import com.mongodb.client.model.changestream.ChangeStreamDocument;
-import com.streamforge.connector.mongo.util.NoSplit;
-import com.streamforge.connector.mongo.util.NoSplitEnumerator;
-import com.streamforge.connector.mongo.util.NoSplitSerializer;
+import com.streamforge.connector.mongo.util.MongoSplit;
+import com.streamforge.connector.mongo.util.MongoSplitEnumerator;
+import com.streamforge.connector.mongo.util.MongoSplitSerializer;
 import com.streamforge.core.dlq.DLQPublisher;
 import com.streamforge.core.model.DlqEvent;
 import com.streamforge.core.pipeline.PipelineBuilder;
@@ -22,6 +21,7 @@ import org.apache.flink.core.io.InputStatus;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.bson.BsonDocument;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
@@ -36,9 +36,12 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
 
   public DataStream<Document> build(
       StreamExecutionEnvironment env, String jobName, int splitIndex, int numSplits) {
+    String uri = require(MONGO_URI);
+    String db = require(MONGO_DB);
+    String collection = require(MONGO_COLLECTION);
     String suffix = numSplits > 1 ? "-MongoSource-" + splitIndex : "-MongoSource";
     return env.fromSource(
-        new MongoChangeStreamFlink(splitIndex, numSplits),
+        new MongoChangeStreamFlink(splitIndex, numSplits, uri, db, collection),
         WatermarkStrategy.noWatermarks(),
         jobName + suffix);
   }
@@ -53,18 +56,29 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
     return Collections.singletonList(Document.parse(json));
   }
 
-  public static class MongoChangeStreamFlink implements Source<Document, NoSplit, Void> {
+  public static class MongoChangeStreamFlink implements Source<Document, MongoSplit, Boolean> {
 
     private final int splitIndex;
     private final int numSplits;
+    private final String uri;
+    private final String db;
+    private final String collection;
 
     public MongoChangeStreamFlink() {
-      this(0, 1);
+      this(0, 1, null, null, null);
     }
 
     public MongoChangeStreamFlink(int splitIndex, int numSplits) {
+      this(splitIndex, numSplits, null, null, null);
+    }
+
+    public MongoChangeStreamFlink(
+        int splitIndex, int numSplits, String uri, String db, String collection) {
       this.splitIndex = splitIndex;
       this.numSplits = numSplits;
+      this.uri = uri;
+      this.db = db;
+      this.collection = collection;
     }
 
     @Override
@@ -73,28 +87,29 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
     }
 
     @Override
-    public SourceReader<Document, NoSplit> createReader(SourceReaderContext ctx) {
-      return new MongoChangeStreamReader(splitIndex, numSplits);
+    public SourceReader<Document, MongoSplit> createReader(SourceReaderContext ctx) {
+      return new MongoChangeStreamReader(uri, db, collection);
     }
 
     @Override
-    public SplitEnumerator<NoSplit, Void> createEnumerator(SplitEnumeratorContext<NoSplit> ctx) {
-      return new NoSplitEnumerator(ctx);
+    public SplitEnumerator<MongoSplit, Boolean> createEnumerator(
+        SplitEnumeratorContext<MongoSplit> ctx) {
+      return new MongoSplitEnumerator(ctx, splitIndex, numSplits, false);
     }
 
     @Override
-    public SplitEnumerator<NoSplit, Void> restoreEnumerator(
-        SplitEnumeratorContext<NoSplit> ctx, Void checkpoint) {
-      return new NoSplitEnumerator(ctx);
+    public SplitEnumerator<MongoSplit, Boolean> restoreEnumerator(
+        SplitEnumeratorContext<MongoSplit> ctx, Boolean checkpoint) {
+      return new MongoSplitEnumerator(ctx, splitIndex, numSplits, Boolean.TRUE.equals(checkpoint));
     }
 
     @Override
-    public SimpleVersionedSerializer<NoSplit> getSplitSerializer() {
-      return NoSplitSerializer.INSTANCE;
+    public SimpleVersionedSerializer<MongoSplit> getSplitSerializer() {
+      return MongoSplitSerializer.INSTANCE;
     }
 
     @Override
-    public SimpleVersionedSerializer<Void> getEnumeratorCheckpointSerializer() {
+    public SimpleVersionedSerializer<Boolean> getEnumeratorCheckpointSerializer() {
       return new SimpleVersionedSerializer<>() {
         @Override
         public int getVersion() {
@@ -102,75 +117,96 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
         }
 
         @Override
-        public byte[] serialize(Void state) {
-          return new byte[0];
+        public byte[] serialize(Boolean state) {
+          return new byte[] {(byte) (Boolean.TRUE.equals(state) ? 1 : 0)};
         }
 
         @Override
-        public Void deserialize(int version, byte[] serialized) {
-          return null;
+        public Boolean deserialize(int version, byte[] serialized) {
+          return serialized.length > 0 && serialized[0] == 1;
         }
       };
     }
   }
 
-  public static class MongoChangeStreamReader implements SourceReader<Document, NoSplit> {
+  public static class MongoChangeStreamReader implements SourceReader<Document, MongoSplit> {
     private static final Logger log = LoggerFactory.getLogger(MongoChangeStreamReader.class);
 
-    private final int splitIndex;
-    private final int numSplits;
+    private final String uri;
+    private final String db;
+    private final String collection;
+
+    private int splitIndex = 0;
+    private int numSplits = 1;
+    private String resumeToken;
 
     private MongoChangeStreamCursor<ChangeStreamDocument<Document>> cursor;
     private volatile boolean running = true;
     private MongoClient client;
 
-    public MongoChangeStreamReader() {
-      this(0, 1);
-    }
-
-    public MongoChangeStreamReader(int splitIndex, int numSplits) {
-      this.splitIndex = splitIndex;
-      this.numSplits = numSplits;
+    public MongoChangeStreamReader(String uri, String db, String collection) {
+      this.uri = uri;
+      this.db = db;
+      this.collection = collection;
     }
 
     @Override
-    public void start() {
-      try {
-        String uri = require(MONGO_URI);
-        String dbName = getOrDefault(MONGO_DB, MONGO_DB);
-        String collName = getOrDefault(MONGO_COLLECTION, MONGO_COLLECTION);
+    public void start() {}
 
+    private void openCursor() {
+      if (client == null) {
         client = MongoClients.create(uri);
-        MongoDatabase db = client.getDatabase(dbName);
-        MongoCollection<Document> coll = db.getCollection(collName);
-
-        for (Document doc : coll.find().limit(3)) {
-          System.out.println("[INIT] Sample doc: " + doc.toJson());
-        }
-
-        MongoCollection<Document> collection = client.getDatabase(dbName).getCollection(collName);
-        List<Bson> pipeline = buildHashModPipeline(splitIndex, numSplits);
-        cursor = collection.watch(pipeline).cursor();
-        log.info(
-            "[MongoSource] Connected to {}.{} (split={}/{})",
-            dbName,
-            collName,
-            splitIndex,
-            numSplits);
-      } catch (Exception e) {
-        log.error("[MongoSource] Failed to start ChangeStream reader", e);
-        throw new RuntimeException("Failed to start Mongo ChangeStream source", e);
       }
+      List<Bson> pipeline = buildHashModPipeline(splitIndex, numSplits);
+      try {
+        cursor = watchCursor(pipeline);
+      } catch (MongoException e) {
+        if (resumeToken == null) {
+          throw e;
+        }
+        log.warn(
+            "[MongoSource] resumeAfter failed for {}.{} ({}); reopening from now with data loss",
+            db,
+            collection,
+            e.getMessage());
+        resumeToken = null;
+        cursor = watchCursor(pipeline);
+      }
+      log.info(
+          "[MongoSource] Connected to {}.{} (split={}/{}, resumed={})",
+          db,
+          collection,
+          splitIndex,
+          numSplits,
+          resumeToken != null);
+    }
+
+    private MongoChangeStreamCursor<ChangeStreamDocument<Document>> watchCursor(
+        List<Bson> pipeline) {
+      ChangeStreamIterable<Document> watch =
+          client.getDatabase(db).getCollection(collection).watch(pipeline);
+      if (resumeToken != null) {
+        watch = watch.resumeAfter(BsonDocument.parse(resumeToken));
+      }
+      return watch.cursor();
     }
 
     @Override
     public InputStatus pollNext(ReaderOutput<Document> output) throws Exception {
-      if (!running || cursor == null) {
+      if (!running) {
         return InputStatus.END_OF_INPUT;
+      }
+      if (cursor == null) {
+        Thread.sleep(100);
+        return InputStatus.NOTHING_AVAILABLE;
       }
 
       try {
         if (!cursor.hasNext()) {
+          BsonDocument postBatch = cursor.getResumeToken();
+          if (postBatch != null) {
+            resumeToken = postBatch.toJson();
+          }
           Thread.sleep(100);
           return InputStatus.NOTHING_AVAILABLE;
         }
@@ -201,6 +237,10 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
                 .append("eventTime", change.getClusterTime());
 
         output.collect(event);
+        BsonDocument token = change.getResumeToken();
+        if (token != null) {
+          resumeToken = token.toJson();
+        }
         return InputStatus.MORE_AVAILABLE;
       } catch (MongoException ex) {
         log.warn("[MongoSource] Lost connection to MongoDB, retrying in 3s...", ex);
@@ -218,12 +258,29 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
     }
 
     @Override
-    public List<NoSplit> snapshotState(long checkpointId) {
-      return Collections.emptyList();
+    public List<MongoSplit> snapshotState(long checkpointId) {
+      if (cursor == null) {
+        return Collections.emptyList();
+      }
+      return Collections.singletonList(new MongoSplit(splitIndex, numSplits, resumeToken));
     }
 
     @Override
-    public void addSplits(List<NoSplit> splits) {}
+    public void addSplits(List<MongoSplit> splits) {
+      if (splits.isEmpty()) {
+        return;
+      }
+      MongoSplit split = splits.get(0);
+      this.splitIndex = split.splitIndex();
+      this.numSplits = split.numSplits();
+      this.resumeToken = split.resumeToken();
+      try {
+        openCursor();
+      } catch (Exception e) {
+        log.error("[MongoSource] Failed to open change stream for {}", split, e);
+        throw new RuntimeException("Failed to start Mongo ChangeStream source", e);
+      }
+    }
 
     @Override
     public void notifyNoMoreSplits() {}
@@ -246,16 +303,11 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
     }
 
     private void reconnect() {
-      String uri = require(MONGO_URI);
-      String dbName = getOrDefault(MONGO_DB, MONGO_DB);
-      String collName = getOrDefault(MONGO_COLLECTION, MONGO_COLLECTION);
-      client = MongoClients.create(uri);
-      List<Bson> pipeline = buildHashModPipeline(splitIndex, numSplits);
-      cursor = client.getDatabase(dbName).getCollection(collName).watch(pipeline).cursor();
+      openCursor();
       log.info(
           "[MongoSource] Reconnected to MongoDB: {}.{} (split={}/{})",
-          dbName,
-          collName,
+          db,
+          collection,
           splitIndex,
           numSplits);
     }
@@ -269,6 +321,8 @@ public class MongoChangeStreamSource implements PipelineBuilder.SourceBuilder<Do
         if (client != null) client.close();
       } catch (Exception ignored) {
       }
+      cursor = null;
+      client = null;
     }
   }
 }
